@@ -7,8 +7,8 @@
 #include <variant>
 #include <optional>
 #include <cstdint>
-#include "toon_errors.hpp"
-#include "toon_io.hpp"
+#include "toon_errors.h"
+#include "toon_io.h"
 
 #include <R.h>
 #include <Rinternals.h>

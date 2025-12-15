@@ -14,7 +14,8 @@ test_that("integers are parsed correctly", {
   expect_equal(from_toon("42"), 42L)
   expect_equal(from_toon("-123"), -123L)
   expect_equal(from_toon("2147483647"), 2147483647L)  # INT32_MAX
-  expect_equal(from_toon("-2147483648"), -2147483648L)  # INT32_MIN
+  # INT32_MIN (-2147483648) is stored as double because it equals R's NA_integer_
+  expect_equal(from_toon("-2147483648"), -2147483648)  # INT32_MIN (as double)
 })
 
 test_that("doubles are parsed correctly", {

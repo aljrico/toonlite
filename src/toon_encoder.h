@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 #include <cstdint>
-#include "toon_io.hpp"
+#include "toon_io.h"
 
 // Forward declaration for R types
 #include <R.h>

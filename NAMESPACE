@@ -1,3 +1,6 @@
+# Imports
+importFrom("utils", "read.csv", "write.csv")
+
 # Core I/O
 export(from_toon)
 export(to_toon)

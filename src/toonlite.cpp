@@ -1,12 +1,29 @@
+// Include C++ standard library headers BEFORE R headers
+// to avoid conflicts with R macros like 'length'
+#include <string>
+#include <string_view>
+#include <vector>
+#include <variant>
+#include <memory>
+#include <cstdint>
+#include <optional>
+#include <unordered_map>
+#include <fstream>
+
 #include <R.h>
 #include <Rinternals.h>
 #include <R_ext/Rdynload.h>
 
-#include "toon_parser.hpp"
-#include "toon_encoder.hpp"
-#include "toon_df.hpp"
-#include "toon_stream.hpp"
-#include "toon_errors.hpp"
+// Undefine R macros that conflict with C++ standard library
+#undef length
+#undef Realloc
+#undef Free
+
+#include "toon_parser.h"
+#include "toon_encoder.h"
+#include "toon_df.h"
+#include "toon_stream.h"
+#include "toon_errors.h"
 
 using namespace toonlite;
 

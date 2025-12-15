@@ -73,7 +73,7 @@ toon_to_json <- function(toon, pretty = FALSE, strict = TRUE,
 #' @param path_toon Character scalar. Path to input TOON file.
 #' @param path_csv Character scalar. Path to output CSV file.
 #' @param key Character scalar or NULL. If non-NULL, extract tabular array at
-#'   root[key].
+#'   root\[key\].
 #' @param strict Logical. If TRUE (default), enforce strict syntax.
 #' @param allow_comments Logical. If TRUE (default), allow comments.
 #' @param warn Logical. If TRUE (default), emit warnings.

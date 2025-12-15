@@ -7,7 +7,7 @@ NULL
 #'
 #' @param file Character scalar. Path to TOON file.
 #' @param key Character scalar or NULL. If non-NULL, extract tabular array at
-#'   root[key] (root must be object).
+#'   root\[key\] (root must be object).
 #' @param strict Logical. If TRUE (default), enforce strict TOON syntax.
 #' @param allow_comments Logical. If TRUE (default), allow # and // comments.
 #' @param allow_duplicate_keys Logical. If TRUE (default), allow duplicate keys.
@@ -23,7 +23,7 @@ NULL
 #' @param n_mismatch Character. How to handle declared row count mismatch:
 #'   \itemize{
 #'     \item "warn" (default): Accept mismatch, return observed rows, emit warning.
-#'     \item "error": Require observed row count equals declared [N].
+#'     \item "error": Require observed row count equals declared \[N\].
 #'   }
 #' @param max_extra_cols Numeric. Maximum new columns allowed via schema expansion.
 #'   Default Inf (no limit).

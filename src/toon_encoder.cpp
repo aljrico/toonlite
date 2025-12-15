@@ -1,5 +1,5 @@
-#include "toon_encoder.hpp"
-#include "toon_errors.hpp"
+#include "toon_encoder.h"
+#include "toon_errors.h"
 #include <cmath>
 #include <algorithm>
 #include <cstring>
@@ -273,7 +273,7 @@ void Encoder::encode_dataframe_tabular(SEXP df, int depth) {
         if (j > 0) buf_.append_char(',');
         SEXP name_elem = STRING_ELT(names, j);
         if (name_elem != NA_STRING) {
-            buf_.append(CHAR(name_elem));
+            buf_.append(std::string_view(CHAR(name_elem)));
         }
     }
     buf_.append("}:", 2);

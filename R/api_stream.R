@@ -7,7 +7,7 @@ NULL
 #'
 #' @param file Character scalar. Path to TOON file.
 #' @param key Character scalar or NULL. If non-NULL, extract tabular array at
-#'   root[key].
+#'   root\[key\].
 #' @param callback Function. Called with each batch as a data.frame.
 #'   Return value is ignored; exceptions propagate and abort parsing.
 #' @param batch_size Integer. Number of rows per batch (default 10000).
@@ -62,7 +62,7 @@ toon_stream_rows <- function(file, key = NULL, callback, batch_size = 10000L,
 #' Stream non-tabular array items
 #'
 #' @param file Character scalar. Path to TOON file.
-#' @param key Character scalar or NULL. If non-NULL, extract array at root[key].
+#' @param key Character scalar or NULL. If non-NULL, extract array at root\[key\].
 #' @param callback Function. Called with each batch as a list.
 #' @param batch_size Integer. Number of items per batch (default 1000).
 #' @param strict Logical. If TRUE (default), enforce strict TOON syntax.
@@ -100,8 +100,13 @@ toon_stream_items <- function(file, key = NULL, callback, batch_size = 1000L,
     data <- data[[key]]
   }
 
-  if (!is.list(data)) {
-    stop("Target must be an array (list)")
+  # Accept both lists and atomic vectors (simplified arrays)
+  if (!is.list(data) && !is.atomic(data)) {
+    stop("Target must be an array (list or vector)")
+  }
+  # Convert atomic vector to list for consistent batch processing
+  if (is.atomic(data)) {
+    data <- as.list(data)
   }
 
   batch_size <- as.integer(batch_size)

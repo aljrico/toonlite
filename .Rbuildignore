@@ -1,0 +1,6 @@
+^\.claude$
+^toonlite_spec\.md$
+^\.Rproj\.user$
+^.*\.Rproj$
+^\.git$
+^\.gitignore$

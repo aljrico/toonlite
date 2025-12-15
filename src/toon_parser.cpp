@@ -1,4 +1,4 @@
-#include "toon_parser.hpp"
+#include "toon_parser.h"
 #include <charconv>
 #include <algorithm>
 #include <cctype>
@@ -338,7 +338,9 @@ std::optional<int64_t> Parser::parse_integer(std::string_view text) {
 
     if (result.ec == std::errc{} && result.ptr == text.data() + text.size()) {
         // Check if it fits in 32-bit signed integer
-        if (value >= INT32_MIN && value <= INT32_MAX) {
+        // Note: INT32_MIN (-2147483648) is R's NA_integer_, so we exclude it
+        // and let it be handled as a double instead
+        if (value > INT32_MIN && value <= INT32_MAX) {
             return value;
         }
     }
@@ -675,6 +677,8 @@ NodePtr Parser::parse_value(BufferedReader& reader, int parent_indent) {
         switch (info.type) {
             case LineType::KEY_VALUE:
             case LineType::KEY_NESTED:
+                // Set peeked_line_ so parse_object can access full line info
+                peeked_line_ = info;
                 return parse_object(reader, parent_indent, info.key);
 
             case LineType::LIST_ITEM: {
@@ -893,8 +897,9 @@ NodePtr Parser::parse_array(BufferedReader& reader, int parent_indent, const Tab
     int arr_indent = -1;
 
     // Handle header line if present
+    // Note: We don't set arr_indent from the header - arr_indent should be the indent of the actual items
     if (has_peeked_ && (peeked_line_.type == LineType::ARRAY_HEADER || peeked_line_.type == LineType::TABULAR_HEADER)) {
-        arr_indent = peeked_line_.indent;
+        // arr_indent will be set when we see the first actual item
         has_peeked_ = false;
     }
 

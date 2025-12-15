@@ -9,8 +9,8 @@
 #include <cstdint>
 #include <optional>
 #include <unordered_map>
-#include "toon_errors.hpp"
-#include "toon_io.hpp"
+#include "toon_errors.h"
+#include "toon_io.h"
 
 namespace toonlite {
 

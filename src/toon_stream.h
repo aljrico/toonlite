@@ -5,9 +5,9 @@
 #include <vector>
 #include <functional>
 #include <cstddef>
-#include "toon_errors.hpp"
-#include "toon_io.hpp"
-#include "toon_df.hpp"
+#include "toon_errors.h"
+#include "toon_io.h"
+#include "toon_df.h"
 
 #include <R.h>
 #include <Rinternals.h>
