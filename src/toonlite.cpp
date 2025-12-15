@@ -335,9 +335,9 @@ SEXP C_validate_toon(SEXP x, SEXP is_file, SEXP strict, SEXP allow_comments, SEX
         Rf_setAttrib(error_info, R_NamesSymbol, error_names);
         Rf_setAttrib(result, Rf_install("error"), error_info);
 
-        UNPROTECT(9);
+        UNPROTECT(9);  // result + error_info + error_names + 6 component SEXPs
     } else {
-        UNPROTECT(1);
+        UNPROTECT(1);  // just result
     }
 
     return result;

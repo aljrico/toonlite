@@ -394,8 +394,10 @@ StreamWriter::~StreamWriter() {
 void StreamWriter::write_header() {
     if (header_written_) return;
 
-    // Write placeholder header - we'll update the count at close
-    file_ << "[0]{";
+    // Write fixed-width placeholder header (12 digits supports up to 999 billion rows)
+    // Format: [000000000000]{field1,field2,...}:
+    // We'll overwrite just the count at close() using seek
+    file_ << "[000000000000]{";
     for (size_t i = 0; i < schema_.size(); i++) {
         if (i > 0) file_ << ",";
         file_ << schema_[i];
@@ -494,22 +496,20 @@ void StreamWriter::close() {
 
     file_.close();
 
-    // Reopen and update the header with actual row count
-    std::ifstream in(filepath_, std::ios::binary);
-    std::string content((std::istreambuf_iterator<char>(in)),
-                         std::istreambuf_iterator<char>());
-    in.close();
+    // Update the header row count in-place using seek
+    // Header format is: [000000000000]{...}:
+    // We need to overwrite the 12-digit placeholder at position 1 (after '[')
+    std::fstream update(filepath_, std::ios::binary | std::ios::in | std::ios::out);
+    if (update.is_open()) {
+        // Format count as 12-digit zero-padded number
+        char count_buf[13];
+        snprintf(count_buf, sizeof(count_buf), "%012zu", rows_written_);
 
-    // Find and replace [0] with actual count
-    size_t pos = content.find("[0]");
-    if (pos != std::string::npos) {
-        std::string count_str = "[" + std::to_string(rows_written_) + "]";
-        content.replace(pos, 3, count_str);
+        // Seek to position 1 (right after '[') and overwrite
+        update.seekp(1, std::ios::beg);
+        update.write(count_buf, 12);
+        update.close();
     }
-
-    std::ofstream out(filepath_, std::ios::binary);
-    out << content;
-    out.close();
 
     closed_ = true;
 }

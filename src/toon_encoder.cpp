@@ -374,60 +374,39 @@ void Encoder::encode_value(SEXP x, int depth) {
         double* data = REAL(x);
 
         auto format_date = [](double val) -> std::string {
-            if (ISNA(val)) return "null";
-            // Days since 1970-01-01
-            int days = static_cast<int>(val);
-            // Simple date calculation
-            int y = 1970, m = 1, d = 1;
-            // Add days (simplified - doesn't handle all edge cases perfectly)
-            int total = days;
-            while (total != 0) {
-                int days_in_year = ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0) ? 366 : 365;
-                if (total >= days_in_year) {
-                    total -= days_in_year;
-                    y++;
-                } else if (total <= -days_in_year) {
-                    total += days_in_year;
-                    y--;
-                } else {
-                    break;
-                }
-            }
-            // Remaining days within year
-            int days_in_month[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
-            if ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0) {
-                days_in_month[1] = 29;
-            }
-            while (total > 0 && m <= 12) {
-                if (total >= days_in_month[m-1]) {
-                    total -= days_in_month[m-1];
-                    m++;
-                } else {
-                    d = total + 1;
-                    total = 0;
-                }
-            }
-            if (total < 0) {
-                // Handle negative days (pre-1970)
-                y--;
-                m = 12;
-                while (total < 0) {
-                    if (-total <= days_in_month[m-1]) {
-                        d = days_in_month[m-1] + total + 1;
-                        total = 0;
-                    } else {
-                        total += days_in_month[m-1];
-                        m--;
-                        if (m == 0) {
-                            m = 12;
-                            y--;
-                        }
-                    }
-                }
+            if (ISNA(val) || !std::isfinite(val)) return "null";
+
+            // Bounds check: R Date supports roughly year 0 to year 9999
+            // That's approximately -719528 to 2932896 days from 1970-01-01
+            constexpr int64_t MIN_DAYS = -719528;  // ~0000-01-01
+            constexpr int64_t MAX_DAYS = 2932896;  // ~9999-12-31
+
+            int64_t days = static_cast<int64_t>(val);
+            if (days < MIN_DAYS || days > MAX_DAYS) {
+                return "null";  // Out of representable range
             }
 
+            // Convert days since 1970-01-01 to year/month/day
+            // Using a well-known algorithm for civil date from days
+            // Based on Howard Hinnant's date algorithms
+            days += 719468;  // Shift to days since 0000-03-01
+
+            int64_t era = (days >= 0 ? days : days - 146096) / 146097;
+            int64_t doe = days - era * 146097;  // day of era [0, 146096]
+            int64_t yoe = (doe - doe/1460 + doe/36524 - doe/146096) / 365;  // year of era [0, 399]
+            int64_t y = yoe + era * 400;
+            int64_t doy = doe - (365*yoe + yoe/4 - yoe/100);  // day of year [0, 365]
+            int64_t mp = (5*doy + 2) / 153;  // month [0, 11]
+            int64_t d = doy - (153*mp + 2) / 5 + 1;  // day [1, 31]
+            int64_t m = mp < 10 ? mp + 3 : mp - 9;  // month [1, 12]
+            y = y + (m <= 2 ? 1 : 0);
+
             char buf[32];
-            snprintf(buf, sizeof(buf), "\"%04d-%02d-%02d\"", y, m, d);
+            int written = snprintf(buf, sizeof(buf), "\"%04d-%02d-%02d\"",
+                                   static_cast<int>(y), static_cast<int>(m), static_cast<int>(d));
+            if (written < 0 || written >= static_cast<int>(sizeof(buf))) {
+                return "null";  // snprintf error
+            }
             return buf;
         };
 

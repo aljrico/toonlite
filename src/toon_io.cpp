@@ -161,8 +161,15 @@ void WriteBuffer::append_escaped_string(std::string_view s) {
                 if (static_cast<unsigned char>(c) < 0x20) {
                     // Control character - encode as \uXXXX
                     char buf[7];
-                    snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
-                    append(buf, 6);
+                    int written = snprintf(buf, sizeof(buf), "\\u%04x", static_cast<unsigned char>(c));
+                    // snprintf returns number of characters that would be written (excluding null)
+                    // For valid control chars (0x00-0x1F), this should always be 6
+                    if (written == 6) {
+                        append(buf, 6);
+                    } else {
+                        // Fallback: use replacement character sequence
+                        append("\\uFFFD", 6);
+                    }
                 } else {
                     append_char(c);
                 }
