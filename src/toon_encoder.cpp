@@ -432,12 +432,24 @@ void Encoder::encode_value(SEXP x, int depth) {
         double* data = REAL(x);
 
         auto format_datetime = [](double val) -> std::string {
-            if (ISNA(val)) return "null";
-            time_t t = static_cast<time_t>(val);
+            if (ISNA(val) || !std::isfinite(val)) return "null";
+
+            // Bounds check: reasonable datetime range (year 0 to year 9999)
+            // Seconds since 1970-01-01: ~-62167219200 to ~253402300799
+            constexpr int64_t MIN_SECS = -62167219200LL;   // ~0000-01-01
+            constexpr int64_t MAX_SECS = 253402300799LL;   // ~9999-12-31
+
+            int64_t secs = static_cast<int64_t>(val);
+            if (secs < MIN_SECS || secs > MAX_SECS) {
+                return "null";  // Out of representable range
+            }
+
+            time_t t = static_cast<time_t>(secs);
             struct tm* tm_info = gmtime(&t);
             if (!tm_info) return "null";
             char buf[64];
-            strftime(buf, sizeof(buf), "\"%Y-%m-%dT%H:%M:%SZ\"", tm_info);
+            size_t written = strftime(buf, sizeof(buf), "\"%Y-%m-%dT%H:%M:%SZ\"", tm_info);
+            if (written == 0) return "null";  // strftime failed
             return buf;
         };
 

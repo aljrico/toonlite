@@ -88,6 +88,12 @@ to_toon <- function(x, pretty = TRUE, indent = 2L, strict = TRUE,
   indent <- as.integer(indent)
   if (indent < 0) indent <- 0L
 
+  # allow_comments is reserved for future use; warn if non-default value passed
+
+  if (allow_comments) {
+    warning("allow_comments is reserved for future use and currently has no effect")
+  }
+
   .Call(C_to_toon, x, pretty, indent, strict)
 }
 

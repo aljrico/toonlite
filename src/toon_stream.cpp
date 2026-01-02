@@ -302,10 +302,14 @@ void RowStreamer::stream(SEXP callback) {
         if (batch_rows_ >= opts_.batch_size) {
             SEXP df = PROTECT(build_dataframe(batch_columns_, batch_rows_));
 
-            // Call R callback
+            // Call R callback with error checking
             SEXP call = PROTECT(Rf_lang2(callback, df));
-            R_tryEval(call, R_GlobalEnv, NULL);
+            int error_occurred = 0;
+            R_tryEval(call, R_GlobalEnv, &error_occurred);
             UNPROTECT(2);
+            if (error_occurred) {
+                throw ParseError("Callback error during streaming", 0, 0, "", filepath_);
+            }
 
             // Reset batch
             batch_columns_.clear();
@@ -326,8 +330,12 @@ void RowStreamer::stream(SEXP callback) {
     if (batch_rows_ > 0) {
         SEXP df = PROTECT(build_dataframe(batch_columns_, batch_rows_));
         SEXP call = PROTECT(Rf_lang2(callback, df));
-        R_tryEval(call, R_GlobalEnv, NULL);
+        int error_occurred = 0;
+        R_tryEval(call, R_GlobalEnv, &error_occurred);
         UNPROTECT(2);
+        if (error_occurred) {
+            throw ParseError("Callback error during streaming", 0, 0, "", filepath_);
+        }
     }
 
     // Check row count mismatch
