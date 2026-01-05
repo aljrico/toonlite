@@ -59,6 +59,10 @@ read_toon <- function(file, strict = TRUE, simplify = TRUE,
   }
   file <- normalizePath(file, mustWork = TRUE)
 
+  if (!identical(encoding, "UTF-8")) {
+    warning("encoding parameter is reserved for future use; currently only UTF-8 is supported")
+  }
+
   .Call(C_read_toon, file, strict, simplify, allow_comments, allow_duplicate_keys)
 }
 
