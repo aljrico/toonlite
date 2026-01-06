@@ -1,0 +1,14 @@
+# Primitive value tests
+null_value: null
+bool_true: true
+bool_false: false
+int_zero: 0
+int_positive: 42
+int_negative: -17
+float_simple: 3.14
+float_scientific: 1.23e10
+float_negative: -0.5
+string_simple: "hello"
+string_empty: ""
+string_escapes: "line1\nline2\ttab"
+string_unicode: "caf\u00e9"

@@ -1,0 +1,15 @@
+# Object structure tests
+simple:
+  key1: "value1"
+  key2: 42
+
+nested:
+  level1:
+    level2:
+      level3: "deep"
+
+mixed:
+  string: "text"
+  number: 123
+  boolean: true
+  null_val: null

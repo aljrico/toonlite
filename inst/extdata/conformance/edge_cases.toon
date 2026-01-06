@@ -1,0 +1,13 @@
+# Edge case tests
+empty_object:
+
+empty_string: ""
+
+large_int: 2147483647
+negative_large_int: -2147483647
+
+float_precision: 1.7976931348623157e308
+
+unicode_string: "Hello \u4e16\u754c"
+
+special_chars: "quotes: \" backslash: \\ tab: \t newline: \n"

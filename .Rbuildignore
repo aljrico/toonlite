@@ -4,3 +4,4 @@
 ^.*\.Rproj$
 ^\.git$
 ^\.gitignore$
+^tools$

@@ -1,0 +1,9 @@
+# This is a hash comment
+key1: "value1"  # trailing comment
+
+// This is a double-slash comment
+key2: 42  // trailing comment
+
+key3:
+  # comment inside nested block
+  nested: true
