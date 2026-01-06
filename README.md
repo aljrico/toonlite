@@ -6,6 +6,41 @@ A minimal-dependency, performance-first R package for reading, writing, validati
 
 TOON is a human-readable data serialization format designed for structured data, with particular strengths for tabular data representation. It combines the readability of YAML with explicit typing and efficient tabular encoding.
 
+### TOON Format Examples
+
+**Objects** use `key: value` syntax:
+```
+name: "Alice"
+age: 30
+active: true
+settings:
+  theme: "dark"
+  notifications: false
+```
+
+**Arrays** use `[N]:` header with `- ` prefixed items:
+```
+colors: [3]:
+  - "red"
+  - "green"
+  - "blue"
+```
+
+**Tabular arrays** use `[N]{fields}:` for efficient data.frame representation:
+```
+[3]{name, age, score}:
+  "Alice", 30, 95.5
+  "Bob", 25, 87.0
+  "Charlie", 35, 92.3
+```
+
+**Comments** are supported with `#` or `//`:
+```
+# Configuration file
+server: "localhost"  # default server
+port: 8080           // can be overridden
+```
+
 ## When to use toonlite
 
 - **LLM payloads**: Structured input/output for language models
@@ -33,9 +68,13 @@ name: "Alice"
 age: 30
 active: true
 ')
+# Returns: list(name = "Alice", age = 30L, active = TRUE)
 
 # Serialize to TOON
 toon_str <- to_toon(list(x = 1, y = 2))
+# Returns:
+# x: 1.0
+# y: 2.0
 
 # Read/write files
 data <- read_toon("config.toon")
@@ -45,16 +84,21 @@ write_toon(data, "output.toon")
 ### Tabular Data
 
 ```r
-# Read tabular TOON as data.frame
-df <- read_toon_df("data.toon")
-
 # Write data.frame as tabular TOON
-write_toon_df(mtcars, "cars.toon")
+write_toon_df(mtcars[1:3, 1:4], "cars.toon")
+# Creates:
+# [3]{mpg, cyl, disp, hp}:
+#   21.0, 6, 160.0, 110
+#   21.0, 6, 160.0, 110
+#   22.8, 4, 108.0, 93
 
-# Streaming for large files
+# Read tabular TOON as data.frame
+df <- read_toon_df("cars.toon")
+
+# Streaming for large files (memory-efficient)
 toon_stream_rows("large.toon",
   callback = function(batch) {
-    # Process each batch
+    # Process each batch independently
     print(nrow(batch))
   },
   batch_size = 10000
@@ -64,7 +108,7 @@ toon_stream_rows("large.toon",
 ### Validation
 
 ```r
-# Validate TOON
+# Validate TOON (returns TRUE/FALSE)
 valid <- validate_toon('key: "value"')
 
 # Assert validity (throws on error)
@@ -77,11 +121,11 @@ formatted <- format_toon('key:1', indent = 2)
 ### Conversions
 
 ```r
-# JSON ↔ TOON (requires jsonlite)
+# JSON <-> TOON (requires jsonlite)
 toon <- json_to_toon('{"x": 1}')
 json <- toon_to_json('x: 1')
 
-# CSV ↔ TOON
+# CSV <-> TOON
 csv_to_toon("data.csv", "data.toon")
 toon_to_csv("data.toon", "data.csv")
 
@@ -94,7 +138,7 @@ parquet_to_toon("data.parquet", "data.toon")
 
 - **Performance-first**: Optimized C++ core for large files
 - **Minimal dependencies**: Base R + compiled C++ only
-- **Tabular fast path**: Efficient data.frame I/O
+- **Tabular fast path**: Efficient data.frame I/O with `[N]{fields}:` syntax
 - **Streaming**: Process files without loading into memory
 - **Comments**: Supports `#` and `//` comments
 - **Robust diagnostics**: Detailed error messages with line/column info
@@ -116,12 +160,12 @@ parquet_to_toon("data.parquet", "data.toon")
 - `as_tabular_toon()` - Convert array-of-objects to tabular
 
 ### Streaming
-- `toon_stream_rows()` - Stream tabular rows
+- `toon_stream_rows()` - Stream tabular rows in batches
 - `toon_stream_items()` - Stream array items
-- `toon_stream_write_rows()` - Write rows in batches
+- `toon_stream_write_rows()` - Write rows incrementally
 
 ### Conversions
-- `json_to_toon()` / `toon_to_json()` - JSON conversion
+- `json_to_toon()` / `toon_to_json()` - JSON conversion (requires jsonlite)
 - `csv_to_toon()` / `toon_to_csv()` - CSV conversion
 - `toon_to_parquet()` / `parquet_to_toon()` - Parquet (requires arrow)
 - `toon_to_feather()` / `feather_to_toon()` - Feather (requires arrow)

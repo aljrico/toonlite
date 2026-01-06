@@ -7,6 +7,9 @@ export(to_toon)
 export(read_toon)
 export(write_toon)
 
+# S3 methods
+S3method(print, toon)
+
 # Validation & formatting
 export(validate_toon)
 export(assert_toon)
