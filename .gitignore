@@ -1,3 +1,6 @@
+# Spec (internal)
+toonlite_spec.md
+
 # Compiled code
 src/*.o
 src/*.so
