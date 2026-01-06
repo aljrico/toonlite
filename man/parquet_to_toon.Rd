@@ -24,3 +24,9 @@ Convert Parquet to TOON
 \details{
 Requires the arrow package. If not installed, an error is thrown.
 }
+\examples{
+\dontrun{
+parquet_to_toon("data.parquet", "data.toon")
+}
+
+}

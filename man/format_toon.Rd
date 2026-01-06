@@ -31,3 +31,11 @@ formatted text (does not rewrite file).
 \description{
 Format/pretty-print TOON
 }
+\examples{
+# Format with default indent
+format_toon('name:"Alice"')
+
+# Format with canonical key ordering
+format_toon('b: 1\na: 2', canonical = TRUE)
+
+}

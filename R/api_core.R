@@ -21,6 +21,16 @@ NULL
 #'     \item primitives -> logical/integer/double/character/NULL
 #'   }
 #'
+#' @examples
+#' # Parse simple object
+#' from_toon('name: "Alice"\nage: 30')
+#'
+#' # Parse array
+#' from_toon('[3]:\n  - 1\n  - 2\n  - 3')
+#'
+#' # Parse with comments
+#' from_toon('# comment\nkey: "value"', allow_comments = TRUE)
+#'
 #' @export
 from_toon <- function(text, strict = TRUE, simplify = TRUE,
                       allow_comments = TRUE, allow_duplicate_keys = TRUE) {
@@ -49,6 +59,12 @@ from_toon <- function(text, strict = TRUE, simplify = TRUE,
 #' @param encoding Character. File encoding (default "UTF-8").
 #'
 #' @return R object representing the parsed TOON data.
+#'
+#' @examples
+#' # Read from file
+#' \dontrun{
+#' data <- read_toon("config.toon")
+#' }
 #'
 #' @export
 read_toon <- function(file, strict = TRUE, simplify = TRUE,
@@ -86,6 +102,16 @@ read_toon <- function(file, strict = TRUE, simplify = TRUE,
 #'   \item NA values -> null
 #' }
 #'
+#' @examples
+#' # Serialize simple list
+#' to_toon(list(name = "Alice", age = 30))
+#'
+#' # Serialize vector
+#' to_toon(c(1, 2, 3))
+#'
+#' # Compact format
+#' to_toon(list(x = 1, y = 2), pretty = FALSE)
+#'
 #' @export
 to_toon <- function(x, pretty = TRUE, indent = 2L, strict = TRUE,
                     allow_comments = FALSE) {
@@ -110,6 +136,11 @@ to_toon <- function(x, pretty = TRUE, indent = 2L, strict = TRUE,
 #' @param strict Logical. If TRUE (default), reject NaN/Inf values.
 #'
 #' @return Invisibly returns NULL.
+#'
+#' @examples
+#' \dontrun{
+#' write_toon(list(x = 1, y = 2), "output.toon")
+#' }
 #'
 #' @export
 write_toon <- function(x, file, pretty = TRUE, indent = 2L, strict = TRUE) {

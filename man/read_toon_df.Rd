@@ -56,3 +56,13 @@ A base data.frame.
 \description{
 Read tabular TOON to data.frame
 }
+\examples{
+\dontrun{
+# Read tabular TOON file
+df <- read_toon_df("data.toon")
+
+# Read nested tabular array
+df <- read_toon_df("config.toon", key = "records")
+}
+
+}

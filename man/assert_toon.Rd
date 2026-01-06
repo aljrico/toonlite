@@ -33,3 +33,12 @@ Assert TOON validity
 Throws \code{toonlite_parse_error} condition if invalid, with attached
 location and snippet information.
 }
+\examples{
+# Valid TOON (returns invisibly)
+assert_toon('name: "Alice"')
+
+# Invalid TOON (throws error)
+\dontrun{
+assert_toon('invalid: {')
+}
+}

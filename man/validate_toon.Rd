@@ -39,3 +39,12 @@ Validate TOON
 Never throws unless there's an internal error (e.g., file unreadable).
 May warn for permissive recoveries.
 }
+\examples{
+# Valid TOON
+validate_toon('key: "value"')
+
+# Invalid TOON (returns FALSE with error attribute)
+result <- validate_toon('key: {invalid')
+if (!result) print(attr(result, "error")$message)
+
+}

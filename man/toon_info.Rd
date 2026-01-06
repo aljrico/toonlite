@@ -23,3 +23,11 @@ A list with components:
 \description{
 Get TOON file info
 }
+\examples{
+\dontrun{
+info <- toon_info("data.toon")
+cat("Arrays:", info$array_count, "\n")
+cat("Has tabular:", info$has_tabular, "\n")
+}
+
+}

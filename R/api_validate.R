@@ -23,6 +23,14 @@ NULL
 #' Never throws unless there's an internal error (e.g., file unreadable).
 #' May warn for permissive recoveries.
 #'
+#' @examples
+#' # Valid TOON
+#' validate_toon('key: "value"')
+#'
+#' # Invalid TOON (returns FALSE with error attribute)
+#' result <- validate_toon('key: {invalid')
+#' if (!result) print(attr(result, "error")$message)
+#'
 #' @export
 validate_toon <- function(x, is_file = FALSE, strict = TRUE,
                           allow_comments = TRUE, allow_duplicate_keys = TRUE) {
@@ -64,6 +72,14 @@ validate_toon <- function(x, is_file = FALSE, strict = TRUE,
 #' Throws \code{toonlite_parse_error} condition if invalid, with attached
 #' location and snippet information.
 #'
+#' @examples
+#' # Valid TOON (returns invisibly)
+#' assert_toon('name: "Alice"')
+#'
+#' # Invalid TOON (throws error)
+#' \dontrun{
+#' assert_toon('invalid: {')
+#' }
 #' @export
 assert_toon <- function(x, is_file = FALSE, strict = TRUE,
                         allow_comments = TRUE, allow_duplicate_keys = TRUE) {
@@ -97,6 +113,13 @@ assert_toon <- function(x, is_file = FALSE, strict = TRUE,
 #' @return Character scalar with formatted TOON. If is_file=TRUE, returns
 #'   formatted text (does not rewrite file).
 #'
+#' @examples
+#' # Format with default indent
+#' format_toon('name:"Alice"')
+#'
+#' # Format with canonical key ordering
+#' format_toon('b: 1\na: 2', canonical = TRUE)
+#'
 #' @export
 format_toon <- function(x, is_file = FALSE, indent = 2L, canonical = FALSE,
                         allow_comments = TRUE) {
@@ -127,6 +150,13 @@ format_toon <- function(x, is_file = FALSE, indent = 2L, canonical = FALSE,
 #'     \item preview: Character vector. First n lines.
 #'   }
 #'
+#' @examples
+#' \dontrun{
+#' info <- toon_peek("data.toon")
+#' cat("Type:", info$type, "\n")
+#' cat("Preview:\n", info$preview, sep = "\n")
+#' }
+#'
 #' @export
 toon_peek <- function(file, n = 50L, allow_comments = TRUE) {
   if (!is.character(file) || length(file) != 1) {
@@ -152,6 +182,13 @@ toon_peek <- function(file, n = 50L, allow_comments = TRUE) {
 #'     \item has_tabular: Logical. Whether file contains tabular arrays.
 #'     \item declared_rows: Integer or NA. Declared row count if tabular.
 #'   }
+#'
+#' @examples
+#' \dontrun{
+#' info <- toon_info("data.toon")
+#' cat("Arrays:", info$array_count, "\n")
+#' cat("Has tabular:", info$has_tabular, "\n")
+#' }
 #'
 #' @export
 toon_info <- function(file, allow_comments = TRUE) {

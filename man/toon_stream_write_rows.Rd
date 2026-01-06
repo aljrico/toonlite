@@ -33,3 +33,19 @@ Stream write tabular rows
 \details{
 Writes a tabular TOON array without holding all rows in memory.
 }
+\examples{
+\dontrun{
+# Stream write rows
+i <- 0
+row_source <- function() {
+  i <<- i + 1
+  if (i > 3) return(NULL)
+  data.frame(x = i, y = i * 2)
+}
+toon_stream_write_rows("output.toon",
+  schema = c("x", "y"),
+  row_source = row_source
+)
+}
+
+}

@@ -29,3 +29,9 @@ Invisibly returns NULL.
 \description{
 Convert CSV to TOON
 }
+\examples{
+\dontrun{
+csv_to_toon("data.csv", "data.toon")
+}
+
+}

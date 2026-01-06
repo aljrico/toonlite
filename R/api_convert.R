@@ -17,6 +17,11 @@ NULL
 #' @details
 #' Requires the jsonlite package. If not installed, an error is thrown.
 #'
+#' @examples
+#' \dontrun{
+#' toon <- json_to_toon('{"name": "Alice", "age": 30}')
+#' }
+#'
 #' @export
 json_to_toon <- function(json, pretty = TRUE, strict = TRUE,
                          allow_comments = TRUE) {
@@ -46,6 +51,11 @@ json_to_toon <- function(json, pretty = TRUE, strict = TRUE,
 #'
 #' @details
 #' Requires the jsonlite package. If not installed, an error is thrown.
+#'
+#' @examples
+#' \dontrun{
+#' json <- toon_to_json('name: "Alice"\nage: 30')
+#' }
 #'
 #' @export
 toon_to_json <- function(toon, pretty = FALSE, strict = TRUE,
@@ -80,6 +90,11 @@ toon_to_json <- function(toon, pretty = FALSE, strict = TRUE,
 #'
 #' @return Invisibly returns NULL.
 #'
+#' @examples
+#' \dontrun{
+#' toon_to_csv("data.toon", "data.csv")
+#' }
+#'
 #' @export
 toon_to_csv <- function(path_toon, path_csv, key = NULL, strict = TRUE,
                         allow_comments = TRUE, warn = TRUE) {
@@ -109,6 +124,11 @@ toon_to_csv <- function(path_toon, path_csv, key = NULL, strict = TRUE,
 #' @param col_types Named character vector specifying column types.
 #'
 #' @return Invisibly returns NULL.
+#'
+#' @examples
+#' \dontrun{
+#' csv_to_toon("data.csv", "data.toon")
+#' }
 #'
 #' @export
 csv_to_toon <- function(path_csv, path_toon, tabular = TRUE, strict = TRUE,
@@ -161,6 +181,11 @@ csv_to_toon <- function(path_csv, path_toon, tabular = TRUE, strict = TRUE,
 #' @details
 #' Requires the arrow package. If not installed, an error is thrown.
 #'
+#' @examples
+#' \dontrun{
+#' toon_to_parquet("data.toon", "data.parquet")
+#' }
+#'
 #' @export
 toon_to_parquet <- function(path_toon, path_parquet, key = NULL, strict = TRUE,
                             allow_comments = TRUE, warn = TRUE) {
@@ -196,6 +221,11 @@ toon_to_parquet <- function(path_toon, path_parquet, key = NULL, strict = TRUE,
 #'
 #' @details
 #' Requires the arrow package. If not installed, an error is thrown.
+#'
+#' @examples
+#' \dontrun{
+#' parquet_to_toon("data.parquet", "data.toon")
+#' }
 #'
 #' @export
 parquet_to_toon <- function(path_parquet, path_toon, tabular = TRUE,
@@ -234,6 +264,11 @@ parquet_to_toon <- function(path_parquet, path_toon, tabular = TRUE,
 #' @details
 #' Requires the arrow package. If not installed, an error is thrown.
 #'
+#' @examples
+#' \dontrun{
+#' toon_to_feather("data.toon", "data.feather")
+#' }
+#'
 #' @export
 toon_to_feather <- function(path_toon, path_feather, key = NULL, strict = TRUE,
                             allow_comments = TRUE, warn = TRUE) {
@@ -269,6 +304,11 @@ toon_to_feather <- function(path_toon, path_feather, key = NULL, strict = TRUE,
 #'
 #' @details
 #' Requires the arrow package. If not installed, an error is thrown.
+#'
+#' @examples
+#' \dontrun{
+#' feather_to_toon("data.feather", "data.toon")
+#' }
 #'
 #' @export
 feather_to_toon <- function(path_feather, path_toon, tabular = TRUE,

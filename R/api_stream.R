@@ -29,6 +29,17 @@ NULL
 #'   \item Stable column order within stream
 #' }
 #'
+#' @examples
+#' \dontrun{
+#' # Stream large file in batches
+#' toon_stream_rows("large.toon",
+#'   callback = function(batch) {
+#'     cat("Processing", nrow(batch), "rows\n")
+#'   },
+#'   batch_size = 10000
+#' )
+#' }
+#'
 #' @export
 toon_stream_rows <- function(file, key = NULL, callback, batch_size = 10000L,
                              strict = TRUE, allow_comments = TRUE,
@@ -72,6 +83,16 @@ toon_stream_rows <- function(file, key = NULL, callback, batch_size = 10000L,
 #' @param simplify Logical. If TRUE (default), simplify homogeneous batches.
 #'
 #' @return Invisibly returns NULL.
+#'
+#' @examples
+#' \dontrun{
+#' # Stream array items
+#' toon_stream_items("items.toon",
+#'   callback = function(batch) {
+#'     cat("Got", length(batch), "items\n")
+#'   }
+#' )
+#' }
 #'
 #' @export
 toon_stream_items <- function(file, key = NULL, callback, batch_size = 1000L,
@@ -138,6 +159,21 @@ toon_stream_items <- function(file, key = NULL, callback, batch_size = 1000L,
 #'
 #' @details
 #' Writes a tabular TOON array without holding all rows in memory.
+#'
+#' @examples
+#' \dontrun{
+#' # Stream write rows
+#' i <- 0
+#' row_source <- function() {
+#'   i <<- i + 1
+#'   if (i > 3) return(NULL)
+#'   data.frame(x = i, y = i * 2)
+#' }
+#' toon_stream_write_rows("output.toon",
+#'   schema = c("x", "y"),
+#'   row_source = row_source
+#' )
+#' }
 #'
 #' @export
 toon_stream_write_rows <- function(file, schema, row_source,

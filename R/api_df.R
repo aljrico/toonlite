@@ -30,6 +30,15 @@ NULL
 #'
 #' @return A base data.frame.
 #'
+#' @examples
+#' \dontrun{
+#' # Read tabular TOON file
+#' df <- read_toon_df("data.toon")
+#'
+#' # Read nested tabular array
+#' df <- read_toon_df("config.toon", key = "records")
+#' }
+#'
 #' @export
 read_toon_df <- function(file, key = NULL, strict = TRUE, allow_comments = TRUE,
                          allow_duplicate_keys = TRUE, warn = TRUE, col_types = NULL,
@@ -65,6 +74,12 @@ read_toon_df <- function(file, key = NULL, strict = TRUE, allow_comments = TRUE,
 #'
 #' @return Invisibly returns NULL.
 #'
+#' @examples
+#' \dontrun{
+#' # Write data.frame as tabular TOON
+#' write_toon_df(mtcars[1:3, 1:4], "cars.toon")
+#' }
+#'
 #' @export
 write_toon_df <- function(df, file, tabular = TRUE, pretty = TRUE,
                           indent = 2L, strict = TRUE) {
@@ -90,6 +105,14 @@ write_toon_df <- function(df, file, tabular = TRUE, pretty = TRUE,
 #' @param warn Logical. If TRUE (default), emit warnings for type promotions.
 #'
 #' @return A data.frame suitable for \code{write_toon_df()}.
+#'
+#' @examples
+#' # Convert array of objects to data.frame
+#' records <- list(
+#'   list(name = "Alice", age = 30),
+#'   list(name = "Bob", age = 25)
+#' )
+#' df <- as_tabular_toon(records)
 #'
 #' @details
 #' In permissive mode:

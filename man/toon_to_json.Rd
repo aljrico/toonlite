@@ -24,3 +24,9 @@ Convert TOON to JSON
 \details{
 Requires the jsonlite package. If not installed, an error is thrown.
 }
+\examples{
+\dontrun{
+json <- toon_to_json('name: "Alice"\nage: 30')
+}
+
+}

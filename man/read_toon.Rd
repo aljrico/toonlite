@@ -34,3 +34,10 @@ R object representing the parsed TOON data.
 \description{
 Read TOON from file
 }
+\examples{
+# Read from file
+\dontrun{
+data <- read_toon("config.toon")
+}
+
+}

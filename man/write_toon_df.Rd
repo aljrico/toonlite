@@ -32,3 +32,10 @@ Invisibly returns NULL.
 \description{
 Write data.frame to tabular TOON
 }
+\examples{
+\dontrun{
+# Write data.frame as tabular TOON
+write_toon_df(mtcars[1:3, 1:4], "cars.toon")
+}
+
+}

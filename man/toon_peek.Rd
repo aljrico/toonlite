@@ -24,3 +24,11 @@ A list with components:
 \description{
 Peek at TOON file structure
 }
+\examples{
+\dontrun{
+info <- toon_peek("data.toon")
+cat("Type:", info$type, "\n")
+cat("Preview:\n", info$preview, sep = "\n")
+}
+
+}

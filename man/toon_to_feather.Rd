@@ -35,3 +35,9 @@ Convert TOON to Feather
 \details{
 Requires the arrow package. If not installed, an error is thrown.
 }
+\examples{
+\dontrun{
+toon_to_feather("data.toon", "data.feather")
+}
+
+}

@@ -37,3 +37,14 @@ R object representing the parsed TOON data:
 \description{
 Parse TOON from string
 }
+\examples{
+# Parse simple object
+from_toon('name: "Alice"\nage: 30')
+
+# Parse array
+from_toon('[3]:\n  - 1\n  - 2\n  - 3')
+
+# Parse with comments
+from_toon('# comment\nkey: "value"', allow_comments = TRUE)
+
+}

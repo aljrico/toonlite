@@ -41,3 +41,14 @@ Invisibly returns NULL.
 \description{
 Stream non-tabular array items
 }
+\examples{
+\dontrun{
+# Stream array items
+toon_stream_items("items.toon",
+  callback = function(batch) {
+    cat("Got", length(batch), "items\n")
+  }
+)
+}
+
+}

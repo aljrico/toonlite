@@ -27,3 +27,12 @@ In permissive mode:
 \item Type promotion to accommodate all values
 }
 }
+\examples{
+# Convert array of objects to data.frame
+records <- list(
+  list(name = "Alice", age = 30),
+  list(name = "Bob", age = 25)
+)
+df <- as_tabular_toon(records)
+
+}

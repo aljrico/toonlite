@@ -23,3 +23,9 @@ Invisibly returns NULL.
 \description{
 Write R object to TOON file
 }
+\examples{
+\dontrun{
+write_toon(list(x = 1, y = 2), "output.toon")
+}
+
+}

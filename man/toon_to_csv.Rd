@@ -33,3 +33,9 @@ Invisibly returns NULL.
 \description{
 Convert TOON to CSV
 }
+\examples{
+\dontrun{
+toon_to_csv("data.toon", "data.csv")
+}
+
+}

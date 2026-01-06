@@ -59,3 +59,15 @@ Guarantees:
 \item Stable column order within stream
 }
 }
+\examples{
+\dontrun{
+# Stream large file in batches
+toon_stream_rows("large.toon",
+  callback = function(batch) {
+    cat("Processing", nrow(batch), "rows\n")
+  },
+  batch_size = 10000
+)
+}
+
+}

@@ -33,3 +33,14 @@ Type conversions:
 \item NA values -> null
 }
 }
+\examples{
+# Serialize simple list
+to_toon(list(name = "Alice", age = 30))
+
+# Serialize vector
+to_toon(c(1, 2, 3))
+
+# Compact format
+to_toon(list(x = 1, y = 2), pretty = FALSE)
+
+}
