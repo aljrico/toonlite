@@ -303,7 +303,8 @@ void Encoder::encode_dataframe_tabular(SEXP df, int depth) {
                     SEXP levels = Rf_getAttrib(col, R_LevelsSymbol);
                     if (levels != R_NilValue) {
                         int idx = INTEGER(col)[i];
-                        if (idx == NA_INTEGER) {
+                        R_xlen_t nlevels = Rf_xlength(levels);
+                        if (idx == NA_INTEGER || idx < 1 || idx > nlevels) {
                             write_string("null");
                         } else {
                             write_escaped_string(CHAR(STRING_ELT(levels, idx - 1)));
