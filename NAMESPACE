@@ -1,0 +1,40 @@
+# Imports
+importFrom("utils", "read.csv", "write.csv")
+
+# Core I/O
+export(from_toon)
+export(to_toon)
+export(read_toon)
+export(write_toon)
+
+# Validation & formatting
+export(validate_toon)
+export(assert_toon)
+export(format_toon)
+
+# Tabular (data.frame) I/O
+export(read_toon_df)
+export(write_toon_df)
+export(as_tabular_toon)
+
+# Streaming
+export(toon_stream_rows)
+export(toon_stream_items)
+export(toon_stream_write_rows)
+
+# Conversions
+export(json_to_toon)
+export(toon_to_json)
+export(toon_to_csv)
+export(csv_to_toon)
+export(toon_to_parquet)
+export(parquet_to_toon)
+export(toon_to_feather)
+export(feather_to_toon)
+
+# Introspection
+export(toon_peek)
+export(toon_info)
+
+# C++ entry points
+useDynLib(toonlite, .registration = TRUE)
