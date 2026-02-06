@@ -4,7 +4,7 @@
 [![R-CMD-check](https://github.com/aljrico/toonlite/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/aljrico/toonlite/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-A fast, minimal-dependency R package for TOON data. TOON is a format designed for structured data that's both human-readable and efficient to parse.
+A fast, minimal-dependency R package for [TOON](https://toonformat.dev/) (Token-Oriented Object Notation) data. TOON is a compact, human-readable serialization format designed for passing structured data to LLMs with significantly reduced token usage.
 
 ## Why TOON?
 
@@ -59,6 +59,7 @@ data <- read_toon("config.toon")
 TOON's tabular syntax is compact and fast to parse:
 
 ```
+# 3 is the row count; {name, age, score} declares the columns
 [3]{name, age, score}:
   "Alice", 30, 95.5
   "Bob", 25, 87.0
@@ -119,11 +120,22 @@ colors: [3]:
   "Charlie", 35
 ```
 
+**Types** -- strings, integers, doubles, booleans, and null:
+```
+name: "Alice"
+age: 30
+score: 95.5
+active: true
+nickname: null
+```
+
 **Comments** use `#` or `//`:
 ```
 server: "localhost"  # default
 port: 8080           // can override
 ```
+
+For the full format specification, see [toonformat.dev](https://toonformat.dev/reference/spec.html).
 
 ## License
 
