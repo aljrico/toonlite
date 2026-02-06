@@ -4,7 +4,7 @@
 [![R-CMD-check](https://github.com/aljrico/toonlite/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/aljrico/toonlite/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-A fast, minimal-dependency R package for TOON data—a format designed for structured data that's both human-readable and efficient to parse.
+A fast, minimal-dependency R package for TOON data. TOON is a format designed for structured data that's both human-readable and efficient to parse.
 
 ## Why TOON?
 
@@ -97,13 +97,13 @@ toon_to_parquet("data.toon", "data.parquet")
 
 ## The format
 
-**Objects** — key-value pairs:
+**Objects** are key-value pairs:
 ```
 name: "Alice"
 age: 30
 ```
 
-**Arrays** — bracketed count with `- ` items:
+**Arrays** use a bracketed count with `- ` items:
 ```
 colors: [3]:
   - "red"
@@ -111,7 +111,7 @@ colors: [3]:
   - "blue"
 ```
 
-**Tabular** — header with fields, then rows:
+**Tabular** uses a header with fields, then rows:
 ```
 [3]{name, age}:
   "Alice", 30
@@ -119,7 +119,7 @@ colors: [3]:
   "Charlie", 35
 ```
 
-**Comments** — `#` or `//`:
+**Comments** use `#` or `//`:
 ```
 server: "localhost"  # default
 port: 8080           // can override
