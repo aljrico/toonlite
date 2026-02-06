@@ -8,7 +8,7 @@ A fast, minimal-dependency R package for [TOON](https://toonformat.dev/) (Token-
 
 ## Why TOON?
 
-JSON is verbose. YAML is ambiguous. CSV can't nest. TOON gives you readability, explicit types, nested structures, and comments -- with significantly fewer tokens.
+JSON is verbose. YAML is ambiguous. CSV can't nest. TOON gives you readability, explicit types, nested structures, and comments, with significantly fewer tokens.
 
 Based on the [TOON benchmark](https://github.com/toon-format/toon) (209 retrieval questions across 4 LLM models):
 
@@ -128,7 +128,7 @@ colors: [3]:
   "Charlie", 35
 ```
 
-**Types** -- strings, integers, doubles, booleans, and null:
+**Types** (strings, integers, doubles, booleans, and null):
 ```
 name: "Alice"
 age: 30
