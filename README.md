@@ -8,15 +8,23 @@ A fast, minimal-dependency R package for [TOON](https://toonformat.dev/) (Token-
 
 ## Why TOON?
 
-JSON is verbose. YAML is ambiguous. CSV can't nest. TOON sits in the sweet spot:
+JSON is verbose. YAML is ambiguous. CSV can't nest. TOON gives you readability, explicit types, nested structures, and comments -- with significantly fewer tokens.
 
-| Feature | JSON | YAML | CSV | TOON |
-|---------|------|------|-----|------|
-| Human-readable | ✓ | ✓ | ✓ | ✓ |
-| Comments | ✗ | ✓ | ✗ | ✓ |
-| Explicit types | ✗ | ✗ | ✗ | ✓ |
-| Efficient tabular | ✗ | ✗ | ✓ | ✓ |
-| Nested structures | ✓ | ✓ | ✗ | ✓ |
+Based on the [TOON benchmark](https://github.com/toon-format/toon) (209 retrieval questions across 4 LLM models):
+
+```
+Token usage (lower = better)
+
+TOON  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓                2,744
+YAML  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓        3,719  (+36%)
+JSON  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  4,545  (+66%)
+
+Retrieval accuracy (higher = better)
+
+TOON  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  73.9%
+JSON  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓    69.7%
+YAML  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓     69.0%
+```
 
 TOON is particularly useful for LLM payloads, structured logs, and large tabular datasets where you want both readability and performance.
 
