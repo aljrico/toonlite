@@ -17,3 +17,8 @@ The input \code{x}, invisibly.
 \description{
 Print method for toon class
 }
+\examples{
+x <- to_toon(list(a = 1, b = 2))
+print(x)
+
+}

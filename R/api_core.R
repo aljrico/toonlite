@@ -161,6 +161,10 @@ write_toon <- function(x, file, pretty = TRUE, indent = 2L, strict = TRUE) {
 #'
 #' @return The input `x`, invisibly.
 #'
+#' @examples
+#' x <- to_toon(list(a = 1, b = 2))
+#' print(x)
+#'
 #' @export
 print.toon <- function(x, ...) {
   cat(x, sep = "\n")

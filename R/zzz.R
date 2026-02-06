@@ -1,4 +1,5 @@
 #' @useDynLib toonlite, .registration = TRUE
+#' @importFrom utils read.csv write.csv
 NULL
 
 .onLoad <- function(libname, pkgname) {
