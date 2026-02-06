@@ -39,6 +39,7 @@ assert_toon('name: "Alice"')
 
 # Invalid TOON (throws error)
 \dontrun{
-assert_toon('invalid: {')
+assert_toon('invalid: [')
 }
+
 }

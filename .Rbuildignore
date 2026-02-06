@@ -1,4 +1,5 @@
 ^\.claude$
+^\.serena$
 ^toonlite_spec\.md$
 ^\.Rproj\.user$
 ^.*\.Rproj$

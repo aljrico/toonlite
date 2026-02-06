@@ -9,6 +9,7 @@
 #include <optional>
 #include <unordered_map>
 #include <fstream>
+#include <cmath>
 
 #include <R.h>
 #include <Rinternals.h>
@@ -16,6 +17,7 @@
 
 // Undefine R macros that conflict with C++ standard library
 #undef length
+#undef error
 #undef Realloc
 #undef Free
 

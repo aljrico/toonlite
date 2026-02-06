@@ -78,8 +78,9 @@ validate_toon <- function(x, is_file = FALSE, strict = TRUE,
 #'
 #' # Invalid TOON (throws error)
 #' \dontrun{
-#' assert_toon('invalid: {')
+#' assert_toon('invalid: [')
 #' }
+#'
 #' @export
 assert_toon <- function(x, is_file = FALSE, strict = TRUE,
                         allow_comments = TRUE, allow_duplicate_keys = TRUE) {

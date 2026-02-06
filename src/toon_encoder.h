@@ -6,9 +6,21 @@
 #include <cstdint>
 #include "toon_io.h"
 
-// Forward declaration for R types
+// R headers (undefine macro collisions with C++ stdlib)
 #include <R.h>
 #include <Rinternals.h>
+#ifdef error
+#undef error
+#endif
+#ifdef length
+#undef length
+#endif
+#ifdef Realloc
+#undef Realloc
+#endif
+#ifdef Free
+#undef Free
+#endif
 
 namespace toonlite {
 

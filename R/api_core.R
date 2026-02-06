@@ -159,6 +159,8 @@ write_toon <- function(x, file, pretty = TRUE, indent = 2L, strict = TRUE) {
 #' @param x TOON string object
 #' @param ... Additional arguments (ignored)
 #'
+#' @return The input `x`, invisibly.
+#'
 #' @export
 print.toon <- function(x, ...) {
   cat(x, sep = "\n")

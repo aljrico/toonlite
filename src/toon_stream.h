@@ -57,7 +57,6 @@ private:
     size_t declared_rows_ = 0;
     size_t observed_rows_ = 0;
     char delimiter_ = ',';
-    int base_indent_ = -1;
 
     // Batch accumulation
     std::vector<ColBuilder> batch_columns_;
