@@ -12,19 +12,30 @@ JSON is verbose. YAML is ambiguous. CSV can't nest. TOON gives you readability, 
 
 Based on the [TOON benchmark](https://github.com/toon-format/toon) (209 retrieval questions across 4 LLM models):
 
-```
-Token usage (lower = better)
+<table>
+<tr>
+<td>
 
+**Token usage** (lower = better)
+```
 TOON  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓                2,744
 YAML  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓        3,719  (+36%)
 JSON  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  4,545  (+66%)
+```
 
-Retrieval accuracy (higher = better)
+</td>
+<td>
 
+**Retrieval accuracy** (higher = better)
+```
 TOON  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  73.9%
 JSON  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓    69.7%
 YAML  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓     69.0%
 ```
+
+</td>
+</tr>
+</table>
 
 TOON is particularly useful for LLM payloads, structured logs, and large tabular datasets where you want both readability and performance.
 
