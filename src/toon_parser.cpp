@@ -1,4 +1,5 @@
 #include "toon_parser.h"
+#include "toon_charconv.h"
 #include <charconv>
 #include <algorithm>
 #include <cctype>
@@ -353,7 +354,7 @@ std::optional<double> Parser::parse_number(std::string_view text) {
 
     // Try to parse as double
     double value;
-    auto result = std::from_chars(text.data(), text.data() + text.size(), value);
+    auto result = double_from_chars(text.data(), text.data() + text.size(), value);
 
     if (result.ec == std::errc{} && result.ptr == text.data() + text.size()) {
         // Reject special values in strict mode

@@ -1,4 +1,5 @@
 #include "toon_df.h"
+#include "toon_charconv.h"
 #include <charconv>
 #include <algorithm>
 #include <cctype>
@@ -322,7 +323,7 @@ void ColBuilder::parse_and_store(size_t row, std::string_view value) {
 
     // Try to parse as double
     double dbl_val;
-    auto result = std::from_chars(value.data(), value.data() + value.size(), dbl_val);
+    auto result = double_from_chars(value.data(), value.data() + value.size(), dbl_val);
     if (result.ec == std::errc{} && result.ptr == value.data() + value.size()) {
         if (type_ == ColType::UNKNOWN || type_ == ColType::LOGICAL || type_ == ColType::INTEGER) {
             promote_to(ColType::DOUBLE);
