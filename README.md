@@ -1,4 +1,4 @@
-# toonlite
+# toonlite <img src="man/figures/logo.svg" align="right" height="139" alt="toonlite logo" />
 
 <!-- badges: start -->
 [![CRAN status](https://www.r-pkg.org/badges/version/toonlite)](https://cran.r-project.org/package=toonlite)
