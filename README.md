@@ -5,7 +5,9 @@
 [![R-CMD-check](https://github.com/aljrico/toonlite/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/aljrico/toonlite/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-A fast, minimal-dependency R package for [TOON](https://toonformat.dev/) (Token-Oriented Object Notation) data. TOON is a compact, human-readable serialization format designed for passing structured data to LLMs with significantly reduced token usage.
+**Fast, minimal-dependency R interface for [TOON](https://toonformat.dev/) data** — read, write, validate, stream, and convert with a C++ backend.
+
+TOON is a compact, human-readable serialization format designed for passing structured data to LLMs with significantly reduced token usage.
 
 ## Why TOON?
 
