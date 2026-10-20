@@ -1,6 +1,6 @@
 Package: toonlite
 Title: Read, Write, Validate, Stream, and Convert TOON Data
-Version: 0.1.0
+Version: 0.1.1
 Authors@R: person("Alejandro Jiménez Rico", role = c("aut", "cre"),
                   email = "aljrico@gmail.com")
 Description: A minimal-dependency, performance-first R package for reading,

@@ -1,9 +1,12 @@
 ^\.github$
 ^\.claude$
-^\.serena$
 ^toonlite_spec\.md$
 ^\.Rproj\.user$
 ^.*\.Rproj$
 ^\.git$
 ^\.gitignore$
 ^tools$
+^.*\.tar\.gz$
+^.*\.Rcheck$
+^inst/hex$
+^\.DS_Store$

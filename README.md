@@ -13,33 +13,6 @@ TOON is a compact, human-readable serialization format designed for passing stru
 
 JSON is verbose. YAML is ambiguous. CSV can't nest. TOON gives you readability, explicit types, nested structures, and comments, with significantly fewer tokens.
 
-Based on the [TOON benchmark](https://github.com/toon-format/toon) (209 retrieval questions across 4 LLM models):
-
-<table>
-<tr>
-<td>
-
-**Token usage** (lower = better)
-```
-TOON  ▓▓▓▓▓▓▓▓▓▓          2,744
-YAML  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓      3,719  (+36%)
-JSON  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓   4,545  (+66%)
-```
-
-</td>
-<td>
-
-**Retrieval accuracy** (higher = better)
-```
-TOON  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓  73.9%
-JSON  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓   69.7%
-YAML  ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓   69.0%
-```
-
-</td>
-</tr>
-</table>
-
 TOON is particularly useful for LLM payloads, structured logs, and large tabular datasets where you want both readability and performance.
 
 ## Installation
