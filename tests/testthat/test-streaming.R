@@ -24,7 +24,7 @@ test_that("toon_stream_rows calls callback with batches", {
 
 test_that("toon_stream_items processes list items", {
   # Create a TOON file with array
-  toon <- "items:\n  - 1\n  - 2\n  - 3\n  - 4\n  - 5"
+  toon <- "items[5]:\n  - 1\n  - 2\n  - 3\n  - 4\n  - 5"
 
   tmp <- tempfile(fileext = ".toon")
   writeLines(toon, tmp)

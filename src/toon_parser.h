@@ -1,156 +1,107 @@
-#ifndef TOON_PARSER_HPP
-#define TOON_PARSER_HPP
+#ifndef TOON_PARSER_H
+#define TOON_PARSER_H
 
+// TOON decoder (spec v4.4 sections 4-14) for read_toon(), from_toon(),
+// validate_toon() and toon_info().
+//
+// The document is decoded into flat arrays instead of one heap object per
+// value: nodes, child links and string bytes each live in one vector, and a
+// tabular array keeps its cells in one block with its field list stored once.
+//
+// TOON values map to R as follows (document_to_r):
+//   object        -> named list ({} is a named list of length 0)
+//   array         -> list; with `simplify`, an array of primitives of one
+//                    type becomes an atomic vector (null -> NA, integers mixed
+//                    with doubles -> double; all-null arrays stay lists)
+//   string        -> character(1)
+//   number        -> integer(1) when it is an integer in R's integer range
+//                    (-2147483647 to 2147483647), otherwise double(1); numbers
+//                    beyond the double range become -Inf/Inf
+//   true / false  -> logical(1)
+//   null          -> NULL
+
+#include <cstdint>
 #include <string>
 #include <string_view>
 #include <vector>
-#include <memory>
-#include <cstdint>
-#include <optional>
+
 #include "toon_errors.h"
-#include "toon_io.h"
+#include "toon_lex.h"
+#include "toon_r.h"
 
 namespace toonlite {
 
-// Forward declarations
-struct Node;
-using NodePtr = std::shared_ptr<Node>;
+enum class NodeKind : uint8_t { Null, Bool, Int, Double, String, Array, Object, Table };
 
-// Node kinds
-enum class NodeKind {
-    N_NULL,
-    N_BOOL,
-    N_INT,
-    N_DOUBLE,
-    N_STRING,
-    N_ARRAY,
-    N_OBJECT
-};
-
-// DOM node representing parsed TOON value
 struct Node {
-    NodeKind kind;
-
-    // Value storage
-    bool bool_val = false;
-    int64_t int_val = 0;
-    double double_val = 0.0;
-    std::string string_val;
-
-    // Children for array/object
-    std::vector<NodePtr> array_items;
-    std::vector<std::pair<std::string, NodePtr>> object_items;
-
-    // Factory methods
-    static NodePtr make_null();
-    static NodePtr make_bool(bool v);
-    static NodePtr make_int(int64_t v);
-    static NodePtr make_double(double v);
-    static NodePtr make_string(const std::string& v);
-    static NodePtr make_string(std::string_view v);
-    static NodePtr make_array();
-    static NodePtr make_object();
+    NodeKind kind = NodeKind::Null;
+    uint32_t len = 0;  // String: bytes; Array/Object: children; Table: rows
+    union {
+        int32_t i;
+        double d;
+        bool b;
+        uint64_t off;  // String: pool offset; Array/Object: first child; Table: table index
+    };
+    Node() : off(0) {}
 };
 
-// Parser options
-struct ParseOptions {
-    bool strict = true;
-    bool simplify = true;
-    bool allow_comments = true;
-    bool allow_duplicate_keys = true;
-    bool warn = true;
+// A child of an array or object. Array children leave the key empty.
+struct Kid {
+    uint32_t node = 0;
+    uint32_t key_len = 0;
+    uint64_t key_off = 0;
 };
 
-// Tabular array header info
-struct TabularHeader {
-    size_t declared_count = 0;
-    std::vector<std::string> fields;
-    char delimiter = ',';
-    bool is_tabular = false;
+// A tabular array or a keyed tabular object (spec 9.3, 9.5). Row r's cells
+// are cells[cell_off + r * leaves ...]; a keyed table lists its entries in
+// `keys` and the row each entry takes its values from in `rows` (they differ
+// when non-strict decoding resolves duplicate entry keys).
+struct Table {
+    std::vector<ResolvedGroup> groups;
+    size_t leaves = 0;
+    uint64_t cell_off = 0;
+    bool keyed = false;
+    std::vector<Kid> keys;
+    std::vector<uint64_t> rows;
 };
 
-// Line classification
-enum class LineType {
-    EMPTY,
-    COMMENT,
-    LIST_ITEM,      // - value
-    KEY_VALUE,      // key: value (inline)
-    KEY_NESTED,     // key: (followed by nested block)
-    ARRAY_HEADER,   // [N]:
-    TABULAR_HEADER, // [N]{fields}:
-    RAW_VALUE       // primitive value
+struct Document {
+    std::vector<Node> nodes;
+    std::vector<Kid> kids;
+    std::vector<Node> cells;
+    std::vector<Table> tables;
+    std::string pool;
+    uint32_t root = 0;
+
+    std::string_view str(uint64_t off, uint32_t len) const {
+        return std::string_view(pool.data() + off, len);
+    }
 };
 
-struct LineInfo {
-    LineType type;
-    size_t indent;
-    std::string_view content;  // After indentation
-    std::string_view key;      // For KEY_* types
-    std::string_view value;    // For KEY_VALUE, LIST_ITEM, RAW_VALUE
-    TabularHeader tabular;     // For ARRAY_HEADER, TABULAR_HEADER
-    size_t line_no;
+// Decode a whole document. Throws ParseError.
+Document parse_toon(const char* data, size_t len, const ReadOptions& opts);
+Document parse_toon_file(const std::string& path, const ReadOptions& opts);
+
+// The R value of a decoded document (unprotected).
+SEXP document_to_r(const Document& doc, bool simplify);
+
+struct DocumentInfo {
+    size_t arrays = 0;
+    size_t objects = 0;
+    bool has_tabular = false;
+    size_t first_table_rows = 0;  // rows of the first tabular array
 };
+DocumentInfo document_info(const Document& doc);
 
-// Parser class
-class Parser {
-public:
-    Parser(const ParseOptions& opts = ParseOptions());
-
-    // Parse from string
-    NodePtr parse_string(const std::string& text);
-    NodePtr parse_string(const char* data, size_t len);
-
-    // Parse from file
-    NodePtr parse_file(const std::string& filepath);
-
-    // Validate without building DOM
-    ValidationResult validate_string(const std::string& text);
-    ValidationResult validate_file(const std::string& filepath);
-
-    // Get warnings accumulated during parsing
-    const std::vector<Warning>& warnings() const { return warnings_; }
-
-private:
-    // Line classification
-    LineInfo classify_line(std::string_view line, size_t line_no);
-
-    // Primitive parsing
-    NodePtr parse_primitive(std::string_view text);
-    bool parse_null(std::string_view text);
-    std::optional<bool> parse_bool(std::string_view text);
-    std::optional<int64_t> parse_integer(std::string_view text);
-    std::optional<double> parse_number(std::string_view text);
-
-    // Header parsing
-    TabularHeader parse_array_header(std::string_view text);
-
-    // Row parsing for tabular arrays
-    std::vector<std::string_view> parse_tabular_row(std::string_view line, char delimiter);
-
-    // Utility functions
-    size_t count_indent(std::string_view line);
-    std::string_view trim(std::string_view sv);
-    std::string_view trim_trailing(std::string_view sv);
-    bool is_comment_line(std::string_view content);
-    void strip_trailing_comment(std::string_view& content);
-
-    // Main parsing logic
-    NodePtr parse_value(BufferedReader& reader, int parent_indent);
-    NodePtr parse_object(BufferedReader& reader, int parent_indent, std::string_view first_key);
-    NodePtr parse_array(BufferedReader& reader, int parent_indent, const TabularHeader& header);
-
-    // Error handling
-    void error(const std::string& msg, size_t line, size_t col = 0);
-
-    ParseOptions opts_;
-    std::vector<Warning> warnings_;
-    std::string current_file_;
-
-    // For peeking at next line
-    bool has_peeked_ = false;
-    LineInfo peeked_line_;
+// A cheap look at the start of a file: the root form, the first keys of a
+// root object and the first lines as written. Nothing is validated.
+struct PeekInfo {
+    std::string type = "unknown";  // object, array, tabular_array, primitive
+    std::vector<std::string> first_keys;
+    std::vector<std::string> preview;
 };
+PeekInfo peek_toon_file(const std::string& path, size_t max_lines);
 
-} // namespace toonlite
+}  // namespace toonlite
 
-#endif // TOON_PARSER_HPP
+#endif  // TOON_PARSER_H

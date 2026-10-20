@@ -1,77 +1,9 @@
 #include "toon_io.h"
 #include <algorithm>
-#include <charconv>
 #include <cstdio>
 #include <cstring>
 
 namespace toonlite {
-
-std::optional<std::string> unescape_quoted_string(std::string_view text, bool strict) {
-    if (text.size() < 2 || text.front() != '"' || text.back() != '"') {
-        return std::nullopt;
-    }
-
-    std::string result;
-    result.reserve(text.size() - 2);
-
-    for (size_t i = 1; i < text.size() - 1; i++) {
-        char c = text[i];
-
-        if (c == '\\' && i + 1 < text.size() - 1) {
-            char next = text[i + 1];
-            switch (next) {
-                case '"':  result += '"'; i++; break;
-                case '\\': result += '\\'; i++; break;
-                case 'n':  result += '\n'; i++; break;
-                case 'r':  result += '\r'; i++; break;
-                case 't':  result += '\t'; i++; break;
-                case 'u':  {
-                    // Unicode escape \uXXXX
-                    if (i + 5 < text.size() - 1) {
-                        std::string_view hex = text.substr(i + 2, 4);
-                        unsigned int cp;
-                        auto res = std::from_chars(hex.data(), hex.data() + 4, cp, 16);
-                        if (res.ec == std::errc{}) {
-                            // Simple UTF-8 encoding for BMP
-                            if (cp < 0x80) {
-                                result += static_cast<char>(cp);
-                            } else if (cp < 0x800) {
-                                result += static_cast<char>(0xC0 | (cp >> 6));
-                                result += static_cast<char>(0x80 | (cp & 0x3F));
-                            } else {
-                                result += static_cast<char>(0xE0 | (cp >> 12));
-                                result += static_cast<char>(0x80 | ((cp >> 6) & 0x3F));
-                                result += static_cast<char>(0x80 | (cp & 0x3F));
-                            }
-                            i += 5;
-                        } else {
-                            if (strict) {
-                                return std::nullopt;
-                            }
-                            result += c;
-                        }
-                    } else {
-                        if (strict) {
-                            return std::nullopt;
-                        }
-                        result += c;
-                    }
-                    break;
-                }
-                default:
-                    if (strict) {
-                        return std::nullopt; // Invalid escape sequence
-                    }
-                    result += c;
-                    break;
-            }
-        } else {
-            result += c;
-        }
-    }
-
-    return result;
-}
 
 BufferedReader::BufferedReader(const std::string& filepath, size_t buffer_size)
     : buffer_size_(buffer_size) {

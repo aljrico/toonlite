@@ -1,54 +1,53 @@
-# Tests for object parsing
+# Object decoding
 
-test_that("simple object is parsed correctly", {
-  toon <- "name: \"Alice\"\nage: 30"
-  result <- from_toon(toon)
-
-  expect_true(is.list(result))
-  expect_equal(names(result), c("name", "age"))
-  expect_equal(result$name, "Alice")
-  expect_equal(result$age, 30L)
+test_that("objects decode to named lists in document order", {
+  result <- from_toon("name: Alice\nage: 30\nperson:\n  address:\n    zip: 10001")
+  expect_identical(result, list(name = "Alice", age = 30L,
+                                person = list(address = list(zip = 10001L))))
 })
 
-test_that("nested object is parsed correctly", {
-  toon <- "person:\n  name: \"Bob\"\n  address:\n    city: \"NYC\"\n    zip: 10001"
-  result <- from_toon(toon)
-
-  expect_true(is.list(result))
-  expect_equal(result$person$name, "Bob")
-  expect_equal(result$person$address$city, "NYC")
-  expect_equal(result$person$address$zip, 10001L)
+test_that("empty objects are named lists of length 0", {
+  expect_identical(from_toon("data:"), list(data = setNames(list(), character())))
+  expect_identical(from_toon(""), setNames(list(), character()))
 })
 
-test_that("empty object is parsed correctly", {
-  toon <- "data:"
-  result <- from_toon(toon)
-
-  expect_true(is.list(result))
-  expect_true("data" %in% names(result))
+test_that("keys: quoted, dotted, empty and unusual", {
+  expect_identical(from_toon('"key with spaces": value'), list(`key with spaces` = "value"))
+  expect_identical(from_toon("user.name: Ada"), list(user.name = "Ada"))
+  expect_identical(from_toon(": 1"), setNames(list(1L), ""))
+  expect_identical(from_toon("foo-bar[2]: 1,2"), list(`foo-bar` = 1:2))
+  expect_identical(from_toon('"a:b": 1'), list(`a:b` = 1L))
 })
 
-test_that("object with quoted keys works", {
-  toon <- '"key with spaces": "value"'
-  result <- from_toon(toon)
-
-  expect_equal(names(result), "key with spaces")
-  expect_equal(result[["key with spaces"]], "value")
+test_that("objects as list items", {
+  toon <- "items[2]:\n  - id: 1\n    tags[2]: a,b\n  - id: 2\n    sub:\n      x: 1"
+  expect_identical(from_toon(toon), list(items = list(
+    list(id = 1L, tags = c("a", "b")),
+    list(id = 2L, sub = list(x = 1L))
+  )))
+  expect_identical(from_toon("items[1]:\n  -"),
+                   list(items = list(setNames(list(), character()))))
 })
 
-test_that("duplicate keys with allow_duplicate_keys=TRUE uses last value", {
-  toon <- "key: 1\nkey: 2\nkey: 3"
-
-  # With duplicates allowed (default), should use last value
-  result <- from_toon(toon, allow_duplicate_keys = TRUE)
-  expect_equal(result$key, 3L)
+test_that("duplicate keys error in strict mode, last wins otherwise", {
+  toon <- "key: 1\nother: 0\nkey: 3"
+  expect_error(from_toon(toon), "Duplicate key 'key'")
+  expect_identical(from_toon(toon, strict = FALSE), list(key = 3L, other = 0L))
 })
 
-test_that("duplicate keys with allow_duplicate_keys=FALSE throws error", {
-  toon <- "key: 1\nkey: 2"
+test_that("allow_duplicate_keys is deprecated", {
+  expect_warning(out <- from_toon("key: 1\nkey: 2", strict = FALSE,
+                                  allow_duplicate_keys = TRUE),
+                 "`allow_duplicate_keys` is deprecated")
+  expect_identical(out, list(key = 2L))
+  expect_warning(expect_error(from_toon("key: 1\nkey: 2", allow_duplicate_keys = TRUE),
+                              "Duplicate key"),
+                 "`allow_duplicate_keys` is deprecated")
+})
 
-  expect_error(
-    from_toon(toon, allow_duplicate_keys = FALSE),
-    "Duplicate key"
-  )
+test_that("deep nesting has a limit", {
+  nest <- function(n) paste(vapply(0:n, function(i) paste0(strrep("  ", i), "k:"), ""),
+                            collapse = "\n")
+  expect_true(is.list(from_toon(nest(1000))))
+  expect_error(from_toon(nest(1001)), "deeper than 1000 levels")
 })

@@ -4,30 +4,41 @@
 \alias{toon_info}
 \title{Get TOON file info}
 \usage{
-toon_info(file, allow_comments = TRUE)
+toon_info(file, allow_comments = TRUE, strict = TRUE, indent = 2L)
 }
 \arguments{
 \item{file}{Character scalar. Path to TOON file.}
 
-\item{allow_comments}{Logical. If TRUE (default), allow comments.}
+\item{allow_comments}{Deprecated and ignored. Comment lines are always
+skipped; passing anything other than TRUE warns.}
+
+\item{strict}{Logical. If TRUE (default), apply the spec's strict decoding
+rules: declared lengths must match, indentation must be a multiple of
+\code{indent} with no tabs, blank lines inside arrays and duplicate keys are
+errors. If FALSE, the spec's five non-strict recoveries apply instead
+(count mismatches accepted, duplicate keys resolve last-write-wins,
+tab/odd indentation, blank lines and depth jumps tolerated).}
+
+\item{indent}{Integer. Spaces per indentation level (the spec's
+\code{indentSize}, default 2).}
 }
 \value{
 A list with components:
 \itemize{
-\item array_count: Integer. Number of arrays in file.
-\item object_count: Integer. Number of objects in file.
-\item has_tabular: Logical. Whether file contains tabular arrays.
-\item declared_rows: Integer or NA. Declared row count if tabular.
+\item array_count: Integer. Number of arrays in the document.
+\item object_count: Integer. Number of objects in the document
+(including the rows of tabular arrays).
+\item has_tabular: Logical. Whether the document contains a tabular
+array.
+\item declared_rows: Integer or NA. Rows of the first tabular array.
 }
 }
 \description{
-Get TOON file info
+Decodes the file and counts its arrays and objects.
 }
 \examples{
-\dontrun{
-info <- toon_info("data.toon")
-cat("Arrays:", info$array_count, "\n")
-cat("Has tabular:", info$has_tabular, "\n")
-}
+f <- tempfile(fileext = ".toon")
+write_toon(list(users = data.frame(id = 1:3)), f)
+toon_info(f)
 
 }

@@ -431,8 +431,12 @@ Scalar parse_scalar(std::string_view tok, std::string& scratch) {
 namespace {
 
 size_t parse_field_list(std::string_view s, size_t p, char delim, bool strict,
-                        FieldList& fl) {
+                        FieldList& fl, size_t level = 1) {
     // s[p] == '{'
+    if (level > kMaxNesting) {
+        throw LexError("Field groups are nested deeper than " + std::to_string(kMaxNesting) +
+                       " levels");
+    }
     const size_t g = fl.groups.size();
     fl.groups.emplace_back();
     const size_t n = s.size();
@@ -478,7 +482,7 @@ size_t parse_field_list(std::string_view s, size_t p, char delim, bool strict,
             decode_key(tok, e.name);
             e.group = static_cast<int>(fl.groups.size());
             fl.groups[g].push_back(std::move(e));
-            p = parse_field_list(s, p, delim, strict, fl);
+            p = parse_field_list(s, p, delim, strict, fl, level + 1);
             while (p < n && s[p] == ' ') p++;
             if (p >= n) {
                 throw LexError("Unmatched '{' in field list");
@@ -489,7 +493,8 @@ size_t parse_field_list(std::string_view s, size_t p, char delim, bool strict,
         } else {
             tok = trim_spaces(tok);
             if (tok.empty()) {
-                throw LexError("Empty field name in field list");
+                throw LexError(s[p] == '}' && fl.groups[g].empty() ? "Empty field list"
+                                                                   : "Empty field name in field list");
             }
             decode_key(tok, e.name);
             e.leaf = static_cast<int>(fl.leaf_count++);
@@ -620,10 +625,26 @@ void parse_header(std::string_view s, const LineScan& sc, bool strict, Header& h
     }
 }
 
-std::string count_mismatch_message(const Header& h, size_t observed, const char* what) {
-    std::string declared = h.length_overflow ? std::string("a length beyond the supported range")
-                                             : std::to_string(h.length);
-    return "Declared " + declared + " " + what + " but found " + std::to_string(observed);
+std::string counted(size_t n, std::string_view noun) {
+    std::string out = std::to_string(n) + " ";
+    if (n == 1) {
+        out += noun;
+    } else if (!noun.empty() && noun.back() == 'y') {
+        out += noun.substr(0, noun.size() - 1);
+        out += "ies";
+    } else {
+        out += noun;
+        out += 's';
+    }
+    return out;
+}
+
+std::string count_mismatch_message(const Header& h, size_t observed, const char* noun) {
+    if (h.length_overflow) {
+        return "Declared length is beyond the supported range; found " + counted(observed, noun);
+    }
+    return "Declared " + counted(static_cast<size_t>(h.length), noun) + " but found " +
+           std::to_string(observed);
 }
 
 // ---------------------------------------------------------------------------
@@ -642,7 +663,7 @@ void RowScanner::end() {
     done_ = true;
 }
 
-bool RowScanner::next(std::vector<std::string_view>& cells) {
+bool RowScanner::next(std::vector<std::string_view>& cells, std::string_view* key) {
     if (done_) return false;
     const Line* L = r_.peek();
     if (!L) {
@@ -662,23 +683,41 @@ bool RowScanner::next(std::vector<std::string_view>& cells) {
     }
     if (L->depth < actual_) {
         if (L->depth >= depth_) {
-            r_.fail("Line is shallower than the rows above it", L);
+            r_.fail(h_.keyed ? "Line is shallower than the entry rows above it"
+                             : "Line is shallower than the rows above it",
+                    L);
         }
         end();
         return false;
     }
     if (L->depth > actual_) {
-        r_.fail("Unexpected indentation after a tabular row", L);
+        r_.fail(h_.keyed ? "Unexpected indentation after an entry row"
+                         : "Unexpected indentation after a tabular row",
+                L);
     }
-    if (!split_impl(L->content, h_.delim, cells, true)) {
+    if (h_.keyed) {
+        // Split at the first unquoted colon, then on the delimiter (9.5).
+        const size_t colon = scan_line(L->content).colon;
+        if (colon == npos) {
+            r_.fail("Expected an entry row ('key: values') in a keyed table", L);
+        }
+        *key = trim_spaces(L->content.substr(0, colon));
+        const std::string_view rest = trim_spaces(L->content.substr(colon + 1));
+        if (rest.empty()) {
+            cells.clear();
+        } else {
+            split_impl(rest, h_.delim, cells, false);
+        }
+    } else if (!split_impl(L->content, h_.delim, cells, true)) {
         r_.fail("Expected a tabular row, found a key-value line", L);
     }
     if (check_width_ && cells.size() != h_.fields.leaf_count) {
-        r_.fail("Tabular row has " + std::to_string(cells.size()) + " values but the header declares " +
-                    std::to_string(h_.fields.leaf_count) + " fields",
+        r_.fail((h_.keyed ? "Entry row has " : "Tabular row has ") + counted(cells.size(), "value") +
+                    " but the header declares " + counted(h_.fields.leaf_count, "field"),
                 L);
     }
     line_no_ = L->no;
+    line_ = L->content;
     r_.consume();
     if (!started_) {
         r_.span_started();

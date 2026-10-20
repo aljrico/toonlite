@@ -475,7 +475,7 @@ SEXP TabularReader::take_batch() {
 void TabularReader::finish(std::vector<std::string>& warnings) {
     if (!empty_table_) {
         if (!header_.count_matches(total_rows_)) {
-            const std::string msg = count_mismatch_message(header_, total_rows_, "rows");
+            const std::string msg = count_mismatch_message(header_, total_rows_, "row");
             if (lines_.strict() && !opts_.n_mismatch_warn) {
                 lines_.fail(msg, header_.line_no);
             }

@@ -5,35 +5,55 @@ NULL
 
 #' Parse TOON from string
 #'
+#' Decodes a TOON document (spec v4.4) into R values.
+#'
 #' @param text Character scalar or raw vector containing TOON data. If raw,
 #'   treated as UTF-8 bytes.
-#' @param strict Logical. If TRUE (default), enforce strict TOON syntax.
-#' @param simplify Logical. If TRUE (default), simplify homogeneous arrays to
-#'   atomic vectors.
-#' @param allow_comments Logical. If TRUE (default), allow # and // comments.
-#' @param allow_duplicate_keys Logical. If TRUE (default), allow duplicate keys
-#'   in objects (last-one-wins semantics).
+#' @param strict Logical. If TRUE (default), apply the spec's strict decoding
+#'   rules: declared lengths must match, indentation must be a multiple of
+#'   `indent` with no tabs, blank lines inside arrays and duplicate keys are
+#'   errors. If FALSE, the spec's five non-strict recoveries apply instead
+#'   (count mismatches accepted, duplicate keys resolve last-write-wins,
+#'   tab/odd indentation, blank lines and depth jumps tolerated).
+#' @param simplify Logical. If TRUE (default), arrays whose elements are all
+#'   primitives of one type become atomic vectors (`null` becomes `NA`;
+#'   integers mixed with doubles give a double vector).
+#' @param allow_comments Deprecated and ignored. Full-line `#` comments are part
+#'   of TOON and are always skipped; passing anything other than TRUE warns.
+#' @param allow_duplicate_keys Deprecated and ignored. Duplicate keys are an
+#'   error when `strict = TRUE` and resolve last-write-wins when
+#'   `strict = FALSE`, as the spec requires. Supplying it warns.
+#' @param indent Integer. Spaces per indentation level (the spec's
+#'   `indentSize`, default 2).
 #'
 #' @return R object representing the parsed TOON data:
 #'   \itemize{
-#'     \item object -> named list
-#'     \item array -> list or atomic vector (if simplified)
-#'     \item primitives -> logical/integer/double/character/NULL
+#'     \item object -> named list (an empty object is a named list of length 0)
+#'     \item array -> list, or atomic vector when simplified
+#'     \item string -> character; `true`/`false` -> logical; `null` -> `NULL`
+#'     \item number -> integer when it is a whole number between -2147483647
+#'       and 2147483647, otherwise double. Numbers beyond the double range
+#'       become `-Inf`/`Inf`.
 #'   }
 #'
+#' @details
+#' Nesting deeper than 1000 levels is an error. Strings containing NUL
+#' (`\u0000`) cannot be represented in R and are an error.
+#'
 #' @examples
-#' # Parse simple object
-#' from_toon('name: "Alice"\nage: 30')
+#' from_toon("name: Alice\nage: 30")
 #'
-#' # Parse array
-#' from_toon('[3]:\n  - 1\n  - 2\n  - 3')
+#' from_toon("[3]: 1,2,3")
 #'
-#' # Parse with comments
-#' from_toon('# comment\nkey: "value"', allow_comments = TRUE)
+#' from_toon("users[2]{id,name}:\n  1,Ada\n  2,Bob")
+#'
+#' # Comment lines are skipped
+#' from_toon("# settings\nkey: value")
 #'
 #' @export
 from_toon <- function(text, strict = TRUE, simplify = TRUE,
-                      allow_comments = TRUE, allow_duplicate_keys = TRUE) {
+                      allow_comments = TRUE, allow_duplicate_keys = TRUE,
+                      indent = 2L) {
   if (is.raw(text)) {
     # Already raw
   } else if (is.character(text)) {
@@ -43,41 +63,41 @@ from_toon <- function(text, strict = TRUE, simplify = TRUE,
   } else {
     stop("text must be a character string or raw vector")
   }
+  warn_comments_deprecated(allow_comments)
+  if (!missing(allow_duplicate_keys)) warn_decoder_duplicate_keys_deprecated()
+  indent <- check_indent(indent)
 
-  .Call(C_from_toon, text, strict, simplify, allow_comments, allow_duplicate_keys)
+  .Call(C_from_toon, text, isTRUE(strict), isTRUE(simplify), indent)
 }
 
 #' Read TOON from file
 #'
+#' @inheritParams from_toon
 #' @param file Character scalar. Path to TOON file.
-#' @param strict Logical. If TRUE (default), enforce strict TOON syntax.
-#' @param simplify Logical. If TRUE (default), simplify homogeneous arrays to
-#'   atomic vectors.
-#' @param allow_comments Logical. If TRUE (default), allow # and // comments.
-#' @param allow_duplicate_keys Logical. If TRUE (default), allow duplicate keys
-#'   in objects.
 #' @param encoding Character. File encoding (default "UTF-8").
 #'
-#' @return R object representing the parsed TOON data.
+#' @return R object representing the parsed TOON data; see [from_toon()].
 #'
 #' @examples
-#' # Read from file
-#' \dontrun{
-#' data <- read_toon("config.toon")
-#' }
+#' f <- tempfile(fileext = ".toon")
+#' write_toon(list(a = 1, b = c("x", "y")), f)
+#' read_toon(f)
 #'
 #' @export
 read_toon <- function(file, strict = TRUE, simplify = TRUE,
                       allow_comments = TRUE, allow_duplicate_keys = TRUE,
-                      encoding = "UTF-8") {
+                      encoding = "UTF-8", indent = 2L) {
   check_string(file)
   file <- normalizePath(file, mustWork = TRUE)
 
   if (!identical(encoding, "UTF-8")) {
     warning("encoding parameter is reserved for future use; currently only UTF-8 is supported")
   }
+  warn_comments_deprecated(allow_comments)
+  if (!missing(allow_duplicate_keys)) warn_decoder_duplicate_keys_deprecated()
+  indent <- check_indent(indent)
 
-  .Call(C_read_toon, file, strict, simplify, allow_comments, allow_duplicate_keys)
+  .Call(C_read_toon, file, isTRUE(strict), isTRUE(simplify), indent)
 }
 
 #' Serialize R object to TOON

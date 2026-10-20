@@ -9,42 +9,61 @@ from_toon(
   strict = TRUE,
   simplify = TRUE,
   allow_comments = TRUE,
-  allow_duplicate_keys = TRUE
+  allow_duplicate_keys = TRUE,
+  indent = 2L
 )
 }
 \arguments{
 \item{text}{Character scalar or raw vector containing TOON data. If raw,
 treated as UTF-8 bytes.}
 
-\item{strict}{Logical. If TRUE (default), enforce strict TOON syntax.}
+\item{strict}{Logical. If TRUE (default), apply the spec's strict decoding
+rules: declared lengths must match, indentation must be a multiple of
+\code{indent} with no tabs, blank lines inside arrays and duplicate keys are
+errors. If FALSE, the spec's five non-strict recoveries apply instead
+(count mismatches accepted, duplicate keys resolve last-write-wins,
+tab/odd indentation, blank lines and depth jumps tolerated).}
 
-\item{simplify}{Logical. If TRUE (default), simplify homogeneous arrays to
-atomic vectors.}
+\item{simplify}{Logical. If TRUE (default), arrays whose elements are all
+primitives of one type become atomic vectors (\code{null} becomes \code{NA};
+integers mixed with doubles give a double vector).}
 
-\item{allow_comments}{Logical. If TRUE (default), allow # and // comments.}
+\item{allow_comments}{Deprecated and ignored. Full-line \verb{#} comments are part
+of TOON and are always skipped; passing anything other than TRUE warns.}
 
-\item{allow_duplicate_keys}{Logical. If TRUE (default), allow duplicate keys
-in objects (last-one-wins semantics).}
+\item{allow_duplicate_keys}{Deprecated and ignored. Duplicate keys are an
+error when \code{strict = TRUE} and resolve last-write-wins when
+\code{strict = FALSE}, as the spec requires. Supplying it warns.}
+
+\item{indent}{Integer. Spaces per indentation level (the spec's
+\code{indentSize}, default 2).}
 }
 \value{
 R object representing the parsed TOON data:
 \itemize{
-\item object -> named list
-\item array -> list or atomic vector (if simplified)
-\item primitives -> logical/integer/double/character/NULL
+\item object -> named list (an empty object is a named list of length 0)
+\item array -> list, or atomic vector when simplified
+\item string -> character; \code{true}/\code{false} -> logical; \code{null} -> \code{NULL}
+\item number -> integer when it is a whole number between -2147483647
+and 2147483647, otherwise double. Numbers beyond the double range
+become \code{-Inf}/\code{Inf}.
 }
 }
 \description{
-Parse TOON from string
+Decodes a TOON document (spec v4.4) into R values.
+}
+\details{
+Nesting deeper than 1000 levels is an error. Strings containing NUL
+(\verb{\\u0000}) cannot be represented in R and are an error.
 }
 \examples{
-# Parse simple object
-from_toon('name: "Alice"\nage: 30')
+from_toon("name: Alice\nage: 30")
 
-# Parse array
-from_toon('[3]:\n  - 1\n  - 2\n  - 3')
+from_toon("[3]: 1,2,3")
 
-# Parse with comments
-from_toon('# comment\nkey: "value"', allow_comments = TRUE)
+from_toon("users[2]{id,name}:\n  1,Ada\n  2,Bob")
+
+# Comment lines are skipped
+from_toon("# settings\nkey: value")
 
 }

@@ -7,7 +7,8 @@ test_that("validate_toon returns TRUE for valid TOON", {
   expect_true(validate_toon('"hello"'))
   expect_true(validate_toon("key: value"))
   expect_true(validate_toon("key:\n  nested: true"))
-  expect_true(validate_toon("[3]:\n  1\n  2\n  3"))
+  expect_true(validate_toon("[3]: 1,2,3"))
+  expect_true(validate_toon("[3]:\n  - 1\n  - 2\n  - 3"))
 })
 
 test_that("validate_toon returns FALSE with error attribute for invalid TOON", {
@@ -20,6 +21,12 @@ test_that("validate_toon returns FALSE with error attribute for invalid TOON", {
   expect_true("message" %in% names(err))
   expect_true("line" %in% names(err))
   expect_true("type" %in% names(err))
+})
+
+test_that("validate_toon does not touch R's shared FALSE", {
+  expect_false(validate_toon("[2]: 1"))
+  # from_toon() returns R's shared FALSE for `false`
+  expect_null(attributes(from_toon("false")))
 })
 
 test_that("validate_toon handles file validation", {
@@ -42,13 +49,24 @@ test_that("validate_toon returns FALSE for missing file", {
 })
 
 test_that("validate_toon respects strict mode", {
-  # Comments allowed by default
+  expect_false(validate_toon("[2]: 1"))
+  expect_true(validate_toon("[2]: 1", strict = FALSE))
+  expect_false(validate_toon("a: 1\na: 2"))
+  expect_true(validate_toon("a: 1\na: 2", strict = FALSE))
+  expect_true(validate_toon("a:\n    b: 1", indent = 4L))
 
+  err <- attr(validate_toon("a: 1\nb\n"), "error")
+  expect_identical(err$line, 2L)
+  expect_identical(err$snippet, "b")
+  expect_match(err$message, "Expected 'key: value'")
+})
+
+test_that("validate_toon always skips comments", {
   expect_true(validate_toon("# comment\nkey: value"))
-
-  # With allow_comments = FALSE, comments should fail
-  result <- validate_toon("# comment\nkey: value", allow_comments = FALSE)
-  expect_false(result)
+  expect_warning(res <- validate_toon("# comment\nkey: value", allow_comments = FALSE),
+                 "`allow_comments` is deprecated")
+  expect_true(res)
+  expect_false(validate_toon("// comment\nkey: value"))
 })
 
 test_that("assert_toon returns invisibly TRUE for valid TOON", {
@@ -114,11 +132,29 @@ test_that("toon_peek detects object type", {
 
 test_that("toon_peek detects array type", {
   tmp <- tempfile(fileext = ".toon")
-  writeLines('[3]:\n  1\n  2\n  3', tmp)
+  writeLines('[3]: 1,2,3', tmp)
   on.exit(unlink(tmp))
 
   result <- toon_peek(tmp)
-  expect_true(result$type %in% c("array", "tabular_array"))
+  expect_identical(result$type, "array")
+})
+
+test_that("toon_peek reports the root form and first keys", {
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  peek <- function(lines) {
+    writeLines(lines, tmp)
+    toon_peek(tmp)[c("type", "first_keys")]
+  }
+  expect_identical(peek(c("# c", "[2]{a}:", "  1", "  2")),
+                   list(type = "tabular_array", first_keys = character()))
+  expect_identical(peek(c("a: 1", "\"b c\"[2]: x,y", "d:", "  e: 1")),
+                   list(type = "object", first_keys = c("a", "b c", "d")))
+  expect_identical(peek(c("[2:]{x}:", "  k1: 1", "  k2: 2")),
+                   list(type = "object", first_keys = c("k1", "k2")))
+  expect_identical(peek("hello"), list(type = "primitive", first_keys = character()))
+  expect_identical(peek("[]"), list(type = "array", first_keys = character()))
+  expect_identical(peek("# only a comment"), list(type = "object", first_keys = character()))
 })
 
 test_that("toon_peek respects n parameter", {
@@ -155,6 +191,21 @@ test_that("toon_info detects tabular arrays", {
   result <- toon_info(tmp)
   expect_true(result$has_tabular)
   expect_equal(result$declared_rows, 3L)
+  expect_equal(result$array_count, 1L)
+  expect_equal(result$object_count, 3L)
+})
+
+test_that("toon_info counts nested values and honours strict", {
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  writeLines(c("a:", "  b[2]: 1,2", "m[2:]{x}:", "  k: 1", "  j: 2", "l[1]:", "  - z: 1"), tmp)
+  info <- toon_info(tmp)
+  expect_identical(info[c("array_count", "object_count", "has_tabular")],
+                   list(array_count = 2L, object_count = 6L, has_tabular = FALSE))
+  expect_identical(info$declared_rows, NA_integer_)
+  writeLines(c("x[3]: 1,2"), tmp)
+  expect_error(toon_info(tmp), "Declared 3 values")
+  expect_identical(toon_info(tmp, strict = FALSE)$array_count, 1L)
 })
 
 test_that("toon_info handles non-tabular files", {

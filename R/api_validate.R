@@ -5,11 +5,11 @@ NULL
 
 #' Validate TOON
 #'
+#' Checks a document against the TOON spec (v4.4) by decoding it.
+#'
 #' @param x Character scalar containing TOON text, or file path if is_file=TRUE.
 #' @param is_file Logical. If TRUE, x is treated as a file path.
-#' @param strict Logical. If TRUE (default), enforce strict TOON syntax.
-#' @param allow_comments Logical. If TRUE (default), allow # and // comments.
-#' @param allow_duplicate_keys Logical. If TRUE (default), allow duplicate keys.
+#' @inheritParams from_toon
 #'
 #' @return Logical scalar.
 #'   \itemize{
@@ -21,20 +21,22 @@ NULL
 #'
 #' @details
 #' Never throws unless there's an internal error (e.g., file unreadable).
-#' May warn for permissive recoveries.
 #'
 #' @examples
-#' # Valid TOON
-#' validate_toon('key: "value"')
+#' validate_toon("key: value")
 #'
 #' # Invalid TOON (returns FALSE with error attribute)
-#' result <- validate_toon('key: {invalid')
+#' result <- validate_toon("items[3]: a,b")
 #' if (!result) print(attr(result, "error")$message)
 #'
 #' @export
 validate_toon <- function(x, is_file = FALSE, strict = TRUE,
-                          allow_comments = TRUE, allow_duplicate_keys = TRUE) {
+                          allow_comments = TRUE, allow_duplicate_keys = TRUE,
+                          indent = 2L) {
   check_string(x)
+  warn_comments_deprecated(allow_comments)
+  if (!missing(allow_duplicate_keys)) warn_decoder_duplicate_keys_deprecated()
+  indent <- check_indent(indent)
 
   if (is_file) {
     if (!file.exists(x)) {
@@ -53,16 +55,12 @@ validate_toon <- function(x, is_file = FALSE, strict = TRUE,
     x <- normalizePath(x)
   }
 
-  .Call(C_validate_toon, x, is_file, strict, allow_comments, allow_duplicate_keys)
+  .Call(C_validate_toon, x, isTRUE(is_file), isTRUE(strict), indent)
 }
 
 #' Assert TOON validity
 #'
-#' @param x Character scalar containing TOON text, or file path if is_file=TRUE.
-#' @param is_file Logical. If TRUE, x is treated as a file path.
-#' @param strict Logical. If TRUE (default), enforce strict TOON syntax.
-#' @param allow_comments Logical. If TRUE (default), allow # and // comments.
-#' @param allow_duplicate_keys Logical. If TRUE (default), allow duplicate keys.
+#' @inheritParams validate_toon
 #'
 #' @return Invisibly returns TRUE if valid.
 #'
@@ -72,19 +70,18 @@ validate_toon <- function(x, is_file = FALSE, strict = TRUE,
 #'
 #' @examples
 #' # Valid TOON (returns invisibly)
-#' assert_toon('name: "Alice"')
+#' assert_toon("name: Alice")
 #'
 #' # Invalid TOON (throws error)
-#' \dontrun{
-#' assert_toon('invalid: [')
-#' }
+#' try(assert_toon("items[2]: a"))
 #'
 #' @export
 assert_toon <- function(x, is_file = FALSE, strict = TRUE,
-                        allow_comments = TRUE, allow_duplicate_keys = TRUE) {
-  result <- validate_toon(x, is_file = is_file, strict = strict,
-                          allow_comments = allow_comments,
-                          allow_duplicate_keys = allow_duplicate_keys)
+                        allow_comments = TRUE, allow_duplicate_keys = TRUE,
+                        indent = 2L) {
+  warn_comments_deprecated(allow_comments)
+  if (!missing(allow_duplicate_keys)) warn_decoder_duplicate_keys_deprecated()
+  result <- validate_toon(x, is_file = is_file, strict = strict, indent = indent)
 
   if (!result) {
     error_info <- attr(result, "error")
@@ -154,59 +151,71 @@ sort_keys <- function(x) {
 
 #' Peek at TOON file structure
 #'
+#' Looks at the first `n` lines only, without decoding or validating the
+#' document.
+#'
 #' @param file Character scalar. Path to TOON file.
 #' @param n Integer. Number of lines to preview (default 50).
-#' @param allow_comments Logical. If TRUE (default), allow comments.
+#' @param allow_comments Deprecated and ignored. Comment lines are always
+#'   skipped; passing anything other than TRUE warns.
 #'
 #' @return A list with components:
 #'   \itemize{
-#'     \item type: Character. Top-level type ("object", "array", "tabular_array", "unknown").
-#'     \item first_keys: Character vector. First few keys if top-level is object.
-#'     \item preview: Character vector. First n lines.
+#'     \item type: Character. The root form: "object", "array",
+#'       "tabular_array", "primitive" or "unknown" (no content in the first
+#'       `n` lines, or not a valid root).
+#'     \item first_keys: Character vector. Up to five keys of a root object
+#'       (entry keys for a keyed table).
+#'     \item preview: Character vector. The first n lines as written.
 #'   }
 #'
 #' @examples
-#' \dontrun{
-#' info <- toon_peek("data.toon")
-#' cat("Type:", info$type, "\n")
-#' cat("Preview:\n", info$preview, sep = "\n")
-#' }
+#' f <- tempfile(fileext = ".toon")
+#' write_toon(list(name = "Ada", tags = c("x", "y")), f)
+#' toon_peek(f)
 #'
 #' @export
 toon_peek <- function(file, n = 50L, allow_comments = TRUE) {
   check_string(file)
   file <- normalizePath(file, mustWork = TRUE)
+  warn_comments_deprecated(allow_comments)
 
   n <- as.integer(n)
-  if (n < 1) n <- 1L
+  if (is.na(n) || n < 1) n <- 1L
 
-  .Call(C_toon_peek, file, n, allow_comments)
+  .Call(C_toon_peek, file, n)
 }
 
 #' Get TOON file info
 #'
+#' Decodes the file and counts its arrays and objects.
+#'
 #' @param file Character scalar. Path to TOON file.
-#' @param allow_comments Logical. If TRUE (default), allow comments.
+#' @param allow_comments Deprecated and ignored. Comment lines are always
+#'   skipped; passing anything other than TRUE warns.
+#' @inheritParams from_toon
 #'
 #' @return A list with components:
 #'   \itemize{
-#'     \item array_count: Integer. Number of arrays in file.
-#'     \item object_count: Integer. Number of objects in file.
-#'     \item has_tabular: Logical. Whether file contains tabular arrays.
-#'     \item declared_rows: Integer or NA. Declared row count if tabular.
+#'     \item array_count: Integer. Number of arrays in the document.
+#'     \item object_count: Integer. Number of objects in the document
+#'       (including the rows of tabular arrays).
+#'     \item has_tabular: Logical. Whether the document contains a tabular
+#'       array.
+#'     \item declared_rows: Integer or NA. Rows of the first tabular array.
 #'   }
 #'
 #' @examples
-#' \dontrun{
-#' info <- toon_info("data.toon")
-#' cat("Arrays:", info$array_count, "\n")
-#' cat("Has tabular:", info$has_tabular, "\n")
-#' }
+#' f <- tempfile(fileext = ".toon")
+#' write_toon(list(users = data.frame(id = 1:3)), f)
+#' toon_info(f)
 #'
 #' @export
-toon_info <- function(file, allow_comments = TRUE) {
+toon_info <- function(file, allow_comments = TRUE, strict = TRUE, indent = 2L) {
   check_string(file)
   file <- normalizePath(file, mustWork = TRUE)
+  warn_comments_deprecated(allow_comments)
+  indent <- check_indent(indent)
 
-  .Call(C_toon_info, file, allow_comments)
+  .Call(C_toon_info, file, isTRUE(strict), indent)
 }

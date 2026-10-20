@@ -98,9 +98,9 @@ toon_stream_items <- function(file, key = NULL, callback, batch_size = 1000L,
 
   # For now, fall back to reading entire file and streaming manually
   # A full implementation would use incremental parsing
-  data <- read_toon(file, strict = strict, simplify = simplify,
-                    allow_comments = allow_comments,
-                    allow_duplicate_keys = allow_duplicate_keys)
+  warn_comments_deprecated(allow_comments)
+  if (!missing(allow_duplicate_keys)) warn_decoder_duplicate_keys_deprecated()
+  data <- read_toon(file, strict = strict, simplify = simplify)
 
   if (!is.null(key)) {
     if (!is.list(data) || !(key %in% names(data))) {

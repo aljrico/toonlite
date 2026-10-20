@@ -10,34 +10,45 @@ read_toon(
   simplify = TRUE,
   allow_comments = TRUE,
   allow_duplicate_keys = TRUE,
-  encoding = "UTF-8"
+  encoding = "UTF-8",
+  indent = 2L
 )
 }
 \arguments{
 \item{file}{Character scalar. Path to TOON file.}
 
-\item{strict}{Logical. If TRUE (default), enforce strict TOON syntax.}
+\item{strict}{Logical. If TRUE (default), apply the spec's strict decoding
+rules: declared lengths must match, indentation must be a multiple of
+\code{indent} with no tabs, blank lines inside arrays and duplicate keys are
+errors. If FALSE, the spec's five non-strict recoveries apply instead
+(count mismatches accepted, duplicate keys resolve last-write-wins,
+tab/odd indentation, blank lines and depth jumps tolerated).}
 
-\item{simplify}{Logical. If TRUE (default), simplify homogeneous arrays to
-atomic vectors.}
+\item{simplify}{Logical. If TRUE (default), arrays whose elements are all
+primitives of one type become atomic vectors (\code{null} becomes \code{NA};
+integers mixed with doubles give a double vector).}
 
-\item{allow_comments}{Logical. If TRUE (default), allow # and // comments.}
+\item{allow_comments}{Deprecated and ignored. Full-line \verb{#} comments are part
+of TOON and are always skipped; passing anything other than TRUE warns.}
 
-\item{allow_duplicate_keys}{Logical. If TRUE (default), allow duplicate keys
-in objects.}
+\item{allow_duplicate_keys}{Deprecated and ignored. Duplicate keys are an
+error when \code{strict = TRUE} and resolve last-write-wins when
+\code{strict = FALSE}, as the spec requires. Supplying it warns.}
 
 \item{encoding}{Character. File encoding (default "UTF-8").}
+
+\item{indent}{Integer. Spaces per indentation level (the spec's
+\code{indentSize}, default 2).}
 }
 \value{
-R object representing the parsed TOON data.
+R object representing the parsed TOON data; see \code{\link[=from_toon]{from_toon()}}.
 }
 \description{
 Read TOON from file
 }
 \examples{
-# Read from file
-\dontrun{
-data <- read_toon("config.toon")
-}
+f <- tempfile(fileext = ".toon")
+write_toon(list(a = 1, b = c("x", "y")), f)
+read_toon(f)
 
 }

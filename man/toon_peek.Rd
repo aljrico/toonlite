@@ -11,24 +11,27 @@ toon_peek(file, n = 50L, allow_comments = TRUE)
 
 \item{n}{Integer. Number of lines to preview (default 50).}
 
-\item{allow_comments}{Logical. If TRUE (default), allow comments.}
+\item{allow_comments}{Deprecated and ignored. Comment lines are always
+skipped; passing anything other than TRUE warns.}
 }
 \value{
 A list with components:
 \itemize{
-\item type: Character. Top-level type ("object", "array", "tabular_array", "unknown").
-\item first_keys: Character vector. First few keys if top-level is object.
-\item preview: Character vector. First n lines.
+\item type: Character. The root form: "object", "array",
+"tabular_array", "primitive" or "unknown" (no content in the first
+\code{n} lines, or not a valid root).
+\item first_keys: Character vector. Up to five keys of a root object
+(entry keys for a keyed table).
+\item preview: Character vector. The first n lines as written.
 }
 }
 \description{
-Peek at TOON file structure
+Looks at the first \code{n} lines only, without decoding or validating the
+document.
 }
 \examples{
-\dontrun{
-info <- toon_peek("data.toon")
-cat("Type:", info$type, "\n")
-cat("Preview:\n", info$preview, sep = "\n")
-}
+f <- tempfile(fileext = ".toon")
+write_toon(list(name = "Ada", tags = c("x", "y")), f)
+toon_peek(f)
 
 }

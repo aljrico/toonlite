@@ -1,4 +1,5 @@
-# Conformance tests using fixture files
+# toonlite's own sample documents in inst/extdata/conformance. The official
+# spec fixtures run in test-spec-conformance.R.
 
 get_fixture_path <- function(name) {
 system.file("extdata", "conformance", name, package = "toonlite")
@@ -46,20 +47,6 @@ test_that("objects fixture parses correctly", {
   expect_null(data$mixed$null_val)
 })
 
-# Arrays conformance
-
-test_that("arrays fixture parses correctly", {
-  path <- get_fixture_path("arrays.toon")
-  skip_if(path == "", "Fixture not installed")
-
-  data <- read_toon(path)
-
-  expect_equal(data$integers, 1:5)
-  expect_equal(data$strings, c("alpha", "beta", "gamma"))
-  expect_type(data$mixed, "list")
-  expect_equal(length(data$mixed), 4L)
-})
-
 # Tabular conformance
 
 test_that("tabular fixture parses correctly as data.frame", {
@@ -75,27 +62,6 @@ test_that("tabular fixture parses correctly as data.frame", {
   expect_equal(df$name, c("Alice", "Bob", "Charlie", "Diana", "Eve"))
   expect_equal(df$age, c(30L, 25L, 35L, 28L, 22L))
   expect_equal(df$active, c(TRUE, FALSE, TRUE, NA, TRUE))
-})
-
-# Comments conformance
-
-test_that("comments fixture parses correctly", {
-  path <- get_fixture_path("comments.toon")
-  skip_if(path == "", "Fixture not installed")
-
-  data <- read_toon(path, allow_comments = TRUE)
-
-  expect_equal(data$key1, "value1")
-  expect_equal(data$key2, 42L)
-  expect_true(data$key3$nested)
-})
-
-test_that("comments fixture fails with allow_comments = FALSE", {
-  path <- get_fixture_path("comments.toon")
-  skip_if(path == "", "Fixture not installed")
-
-  result <- validate_toon(path, is_file = TRUE, allow_comments = FALSE)
-  expect_false(result)
 })
 
 # Edge cases conformance
@@ -148,8 +114,8 @@ test_that("tabular round-trip correctly", {
 # Validation conformance
 
 test_that("all conformance fixtures validate", {
-  fixtures <- c("primitives.toon", "objects.toon", "arrays.toon",
-                "tabular.toon", "comments.toon", "edge_cases.toon")
+  fixtures <- c("primitives.toon", "objects.toon", "tabular.toon",
+                "edge_cases.toon")
 
   for (fixture in fixtures) {
     path <- get_fixture_path(fixture)

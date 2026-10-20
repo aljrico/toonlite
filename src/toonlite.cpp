@@ -7,8 +7,6 @@
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
-#include <fstream>
-#include <functional>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -82,6 +80,16 @@ std::string path_arg(SEXP x) {
 }
 
 bool flag_arg(SEXP x) { return Rf_asLogical(x) == TRUE; }
+
+// The UTF-8 text of a character scalar.
+std::string_view text_arg(SEXP x) {
+    SEXP c = STRING_ELT(x, 0);
+    if (c == NA_STRING) throw std::invalid_argument("`text` must not be NA");
+    if (Rf_getCharCE(c) == CE_BYTES) {
+        throw std::invalid_argument("Strings marked as \"bytes\" cannot be decoded; convert them to UTF-8 first");
+    }
+    return Rf_translateCharUTF8(c);
+}
 
 ReadOptions read_options(SEXP strict, SEXP indent) {
     ReadOptions o;
@@ -177,158 +185,6 @@ TableReadOptions table_options(SEXP key, SEXP strict, SEXP indent, SEXP warn,
 
 }  // namespace
 
-// Helper to convert Node to SEXP
-static SEXP node_to_sexp(const NodePtr& node, bool simplify) {
-    if (!node) return R_NilValue;
-
-    switch (node->kind) {
-        case NodeKind::N_NULL:
-            return R_NilValue;
-
-        case NodeKind::N_BOOL: {
-            SEXP result = PROTECT(Rf_allocVector(LGLSXP, 1));
-            LOGICAL(result)[0] = node->bool_val ? TRUE : FALSE;
-            UNPROTECT(1);
-            return result;
-        }
-
-        case NodeKind::N_INT: {
-            SEXP result = PROTECT(Rf_allocVector(INTSXP, 1));
-            INTEGER(result)[0] = static_cast<int>(node->int_val);
-            UNPROTECT(1);
-            return result;
-        }
-
-        case NodeKind::N_DOUBLE: {
-            SEXP result = PROTECT(Rf_allocVector(REALSXP, 1));
-            REAL(result)[0] = node->double_val;
-            UNPROTECT(1);
-            return result;
-        }
-
-        case NodeKind::N_STRING: {
-            SEXP result = PROTECT(Rf_allocVector(STRSXP, 1));
-            SET_STRING_ELT(result, 0, Rf_mkCharCE(node->string_val.c_str(), CE_UTF8));
-            UNPROTECT(1);
-            return result;
-        }
-
-        case NodeKind::N_ARRAY: {
-            size_t n = node->array_items.size();
-
-            if (simplify && n > 0) {
-                // Check if all items are same primitive type
-                NodeKind first_kind = node->array_items[0]->kind;
-                bool all_same = true;
-                bool all_primitive = true;
-
-                for (const auto& item : node->array_items) {
-                    if (item->kind == NodeKind::N_ARRAY || item->kind == NodeKind::N_OBJECT) {
-                        all_primitive = false;
-                        break;
-                    }
-                    if (item->kind != first_kind && item->kind != NodeKind::N_NULL) {
-                        if (first_kind == NodeKind::N_NULL) {
-                            first_kind = item->kind;
-                        } else {
-                            all_same = false;
-                        }
-                    }
-                }
-
-                if (all_primitive && all_same) {
-                    // Convert to atomic vector
-                    switch (first_kind) {
-                        case NodeKind::N_BOOL: {
-                            SEXP result = PROTECT(Rf_allocVector(LGLSXP, n));
-                            int* data = LOGICAL(result);
-                            for (size_t i = 0; i < n; i++) {
-                                if (node->array_items[i]->kind == NodeKind::N_NULL) {
-                                    data[i] = NA_LOGICAL;
-                                } else {
-                                    data[i] = node->array_items[i]->bool_val ? TRUE : FALSE;
-                                }
-                            }
-                            UNPROTECT(1);
-                            return result;
-                        }
-                        case NodeKind::N_INT: {
-                            SEXP result = PROTECT(Rf_allocVector(INTSXP, n));
-                            int* data = INTEGER(result);
-                            for (size_t i = 0; i < n; i++) {
-                                if (node->array_items[i]->kind == NodeKind::N_NULL) {
-                                    data[i] = NA_INTEGER;
-                                } else {
-                                    data[i] = static_cast<int>(node->array_items[i]->int_val);
-                                }
-                            }
-                            UNPROTECT(1);
-                            return result;
-                        }
-                        case NodeKind::N_DOUBLE: {
-                            SEXP result = PROTECT(Rf_allocVector(REALSXP, n));
-                            double* data = REAL(result);
-                            for (size_t i = 0; i < n; i++) {
-                                if (node->array_items[i]->kind == NodeKind::N_NULL) {
-                                    data[i] = NA_REAL;
-                                } else {
-                                    data[i] = node->array_items[i]->double_val;
-                                }
-                            }
-                            UNPROTECT(1);
-                            return result;
-                        }
-                        case NodeKind::N_STRING: {
-                            SEXP result = PROTECT(Rf_allocVector(STRSXP, n));
-                            for (size_t i = 0; i < n; i++) {
-                                if (node->array_items[i]->kind == NodeKind::N_NULL) {
-                                    SET_STRING_ELT(result, i, NA_STRING);
-                                } else {
-                                    SET_STRING_ELT(result, i,
-                                        Rf_mkCharCE(node->array_items[i]->string_val.c_str(), CE_UTF8));
-                                }
-                            }
-                            UNPROTECT(1);
-                            return result;
-                        }
-                        default:
-                            break;
-                    }
-                }
-            }
-
-            // Return as list
-            SEXP result = PROTECT(Rf_allocVector(VECSXP, n));
-            for (size_t i = 0; i < n; i++) {
-                SET_VECTOR_ELT(result, i, node_to_sexp(node->array_items[i], simplify));
-            }
-            UNPROTECT(1);
-            return result;
-        }
-
-        case NodeKind::N_OBJECT: {
-            size_t n = node->object_items.size();
-            SEXP result = PROTECT(Rf_allocVector(VECSXP, n));
-            SEXP names = PROTECT(Rf_allocVector(STRSXP, n));
-
-            for (size_t i = 0; i < n; i++) {
-                SET_STRING_ELT(names, i, Rf_mkCharCE(node->object_items[i].first.c_str(), CE_UTF8));
-                SET_VECTOR_ELT(result, i, node_to_sexp(node->object_items[i].second, simplify));
-            }
-
-            Rf_setAttrib(result, R_NamesSymbol, names);
-            UNPROTECT(2);
-            return result;
-        }
-    }
-
-    return R_NilValue;
-}
-
-static void add_warnings(const std::vector<Warning>& from, Warnings& to) {
-    for (const auto& w : from) to.push_back(w.message);
-}
-
 // A named list filled one element at a time, so every value is reachable
 // before the next allocation. Leaves one PROTECT on the stack until done().
 class NamedList {
@@ -380,40 +236,25 @@ static void finalize_stream_writer(SEXP p) {
 
 extern "C" {
 
-SEXP C_from_toon(SEXP text, SEXP strict, SEXP simplify, SEXP allow_comments,
-                 SEXP allow_duplicate_keys) {
-    return guarded("Error parsing TOON", [&](Warnings& w) {
-        ParseOptions opts;
-        opts.strict = flag_arg(strict);
-        opts.simplify = flag_arg(simplify);
-        opts.allow_comments = flag_arg(allow_comments);
-        opts.allow_duplicate_keys = flag_arg(allow_duplicate_keys);
-        Parser parser(opts);
-        NodePtr node;
+SEXP C_from_toon(SEXP text, SEXP strict, SEXP simplify, SEXP indent) {
+    return guarded("Error parsing TOON", [&](Warnings&) {
+        const ReadOptions opts = read_options(strict, indent);
+        Document doc;
         if (TYPEOF(text) == RAWSXP) {
-            node = parser.parse_string(reinterpret_cast<const char*>(RAW(text)),
-                                       static_cast<size_t>(Rf_xlength(text)));
+            doc = parse_toon(reinterpret_cast<const char*>(RAW(text)),
+                             static_cast<size_t>(Rf_xlength(text)), opts);
         } else {
-            const char* data = Rf_translateCharUTF8(STRING_ELT(text, 0));
-            node = parser.parse_string(data, std::strlen(data));
+            const std::string_view s = text_arg(text);
+            doc = parse_toon(s.data(), s.size(), opts);
         }
-        add_warnings(parser.warnings(), w);
-        return node_to_sexp(node, opts.simplify);
+        return document_to_r(doc, flag_arg(simplify));
     });
 }
 
-SEXP C_read_toon(SEXP file, SEXP strict, SEXP simplify, SEXP allow_comments,
-                 SEXP allow_duplicate_keys) {
-    return guarded("Error reading TOON file", [&](Warnings& w) {
-        ParseOptions opts;
-        opts.strict = flag_arg(strict);
-        opts.simplify = flag_arg(simplify);
-        opts.allow_comments = flag_arg(allow_comments);
-        opts.allow_duplicate_keys = flag_arg(allow_duplicate_keys);
-        Parser parser(opts);
-        NodePtr node = parser.parse_file(path_arg(file));
-        add_warnings(parser.warnings(), w);
-        return node_to_sexp(node, opts.simplify);
+SEXP C_read_toon(SEXP file, SEXP strict, SEXP simplify, SEXP indent) {
+    return guarded("Error reading TOON file", [&](Warnings&) {
+        const Document doc = parse_toon_file(path_arg(file), read_options(strict, indent));
+        return document_to_r(doc, flag_arg(simplify));
     });
 }
 
@@ -440,24 +281,30 @@ SEXP C_write_toon(SEXP x, SEXP file, SEXP indent, SEXP delimiter) {
     });
 }
 
-SEXP C_validate_toon(SEXP x, SEXP is_file, SEXP strict, SEXP allow_comments,
-                     SEXP allow_duplicate_keys) {
+SEXP C_validate_toon(SEXP x, SEXP is_file, SEXP strict, SEXP indent) {
     return guarded("Error validating TOON", [&](Warnings&) {
-        ParseOptions opts;
-        opts.strict = flag_arg(strict);
-        opts.allow_comments = flag_arg(allow_comments);
-        opts.allow_duplicate_keys = flag_arg(allow_duplicate_keys);
-        Parser parser(opts);
-        const ValidationResult vr = flag_arg(is_file)
-                                        ? parser.validate_file(path_arg(x))
-                                        : parser.validate_string(Rf_translateCharUTF8(STRING_ELT(x, 0)));
-        SEXP result = PROTECT(Rf_ScalarLogical(vr.valid ? TRUE : FALSE));
+        const ReadOptions opts = read_options(strict, indent);
+        ValidationResult vr = ValidationResult::ok();
+        try {
+            if (flag_arg(is_file)) {
+                parse_toon_file(path_arg(x), opts);
+            } else {
+                const std::string_view s = text_arg(x);
+                parse_toon(s.data(), s.size(), opts);
+            }
+        } catch (const ParseError& e) {
+            vr = ValidationResult::error(e.what(), e.line(), e.column(), e.snippet(), e.file());
+        }
+        // A fresh vector: Rf_ScalarLogical() returns R's shared TRUE/FALSE,
+        // which must never carry attributes.
+        SEXP result = PROTECT(Rf_allocVector(LGLSXP, 1));
+        LOGICAL(result)[0] = vr.valid ? TRUE : FALSE;
         if (!vr.valid) {
             NamedList info(6);
             info.set(0, "type", Rf_mkString("parse_error"))
                 .set(1, "message", Rf_ScalarString(mkchar_utf8(vr.message)))
-                .set(2, "line", Rf_ScalarInteger(vr.line > 0 ? static_cast<int>(vr.line) : NA_INTEGER))
-                .set(3, "column", Rf_ScalarInteger(vr.column > 0 ? static_cast<int>(vr.column) : NA_INTEGER))
+                .set(2, "line", Rf_ScalarInteger(vr.line > 0 && vr.line <= INT_MAX ? static_cast<int>(vr.line) : NA_INTEGER))
+                .set(3, "column", Rf_ScalarInteger(vr.column > 0 && vr.column <= INT_MAX ? static_cast<int>(vr.column) : NA_INTEGER))
                 .set(4, "snippet", string_or_na(vr.snippet))
                 .set(5, "file", string_or_na(vr.file));
             Rf_setAttrib(result, Rf_install("error"), info.done());
@@ -500,95 +347,33 @@ SEXP C_stream_rows(SEXP file, SEXP key, SEXP callback, SEXP batch_size,
     });
 }
 
-SEXP C_toon_peek(SEXP file, SEXP n, SEXP allow_comments) {
-    (void)allow_comments;
+SEXP C_toon_peek(SEXP file, SEXP n) {
     return guarded("Error peeking TOON", [&](Warnings&) {
-        const std::string path = path_arg(file);
         const int max_lines = Rf_asInteger(n);
-        BufferedReader reader(path);
-        if (reader.has_error()) throw std::runtime_error(reader.error_message());
-
-        std::vector<std::string> lines;
-        std::string_view line;
-        size_t line_no;
-        std::string top_type = "unknown";
-        std::vector<std::string> first_keys;
-        while (static_cast<int>(lines.size()) < max_lines && reader.next_line(line, line_no)) {
-            lines.emplace_back(line);
-            size_t ind = 0;
-            while (ind < line.size() && (line[ind] == ' ' || line[ind] == '\t')) ind++;
-            if (ind == line.size() || line[ind] == '#') continue;
-            const char c = line[ind];
-            if (top_type == "unknown") {
-                if (c == '[') {
-                    top_type = line.find('{') != std::string_view::npos ? "tabular_array" : "array";
-                } else if (c == '-') {
-                    top_type = "array";
-                } else if (line.find(':') != std::string_view::npos) {
-                    top_type = "object";
-                }
-            }
-            if (top_type == "object" && ind == 0 && first_keys.size() < 5) {
-                size_t colon = line.find(':');
-                if (colon != std::string_view::npos) {
-                    std::string key(line.substr(0, colon));
-                    const size_t lb = key.find('[');
-                    if (lb != std::string::npos) key.resize(lb);
-                    while (!key.empty() && key.back() == ' ') key.pop_back();
-                    if (!key.empty()) first_keys.push_back(key);
-                }
-            }
-        }
-
+        const PeekInfo p = peek_toon_file(
+            path_arg(file), max_lines == NA_INTEGER || max_lines < 1 ? 1 : static_cast<size_t>(max_lines));
         NamedList out(3);
-        out.set(0, "type", Rf_mkString(top_type.c_str()));
-        out.set(1, "first_keys", strings_to_sexp(first_keys));
-        out.set(2, "preview", strings_to_sexp(lines));
+        out.set(0, "type", Rf_mkString(p.type.c_str()))
+            .set(1, "first_keys", strings_to_sexp(p.first_keys))
+            .set(2, "preview", strings_to_sexp(p.preview));
         return out.done();
     });
 }
 
-SEXP C_toon_info(SEXP file, SEXP allow_comments) {
+SEXP C_toon_info(SEXP file, SEXP strict, SEXP indent) {
     return guarded("Error getting TOON info", [&](Warnings&) {
-        ParseOptions opts;
-        opts.allow_comments = flag_arg(allow_comments);
-        opts.simplify = false;
-        Parser parser(opts);
-        NodePtr node = parser.parse_file(path_arg(file));
-
-        int arrays = 0, objects = 0;
-        bool has_tabular = false;
-        size_t declared_rows = 0;
-        std::function<void(const NodePtr&)> count = [&](const NodePtr& n) {
-            if (!n) return;
-            if (n->kind == NodeKind::N_ARRAY) {
-                arrays++;
-                if (!n->array_items.empty()) {
-                    bool all_objects = true;
-                    for (const auto& item : n->array_items) {
-                        if (item->kind != NodeKind::N_OBJECT) {
-                            all_objects = false;
-                            break;
-                        }
-                    }
-                    if (all_objects) {
-                        has_tabular = true;
-                        declared_rows = n->array_items.size();
-                    }
-                }
-                for (const auto& item : n->array_items) count(item);
-            } else if (n->kind == NodeKind::N_OBJECT) {
-                objects++;
-                for (const auto& item : n->object_items) count(item.second);
-            }
+        const DocumentInfo info =
+            document_info(parse_toon_file(path_arg(file), read_options(strict, indent)));
+        auto count = [](size_t v) {
+            return v <= static_cast<size_t>(INT_MAX) ? Rf_ScalarInteger(static_cast<int>(v))
+                                                     : Rf_ScalarReal(static_cast<double>(v));
         };
-        count(node);
         NamedList out(4);
-        out.set(0, "array_count", Rf_ScalarInteger(arrays))
-            .set(1, "object_count", Rf_ScalarInteger(objects))
-            .set(2, "has_tabular", Rf_ScalarLogical(has_tabular ? TRUE : FALSE))
+        out.set(0, "array_count", count(info.arrays))
+            .set(1, "object_count", count(info.objects))
+            .set(2, "has_tabular", Rf_ScalarLogical(info.has_tabular ? TRUE : FALSE))
             .set(3, "declared_rows",
-                 Rf_ScalarInteger(has_tabular ? static_cast<int>(declared_rows) : NA_INTEGER));
+                 info.has_tabular ? count(info.first_table_rows) : Rf_ScalarInteger(NA_INTEGER));
         return out.done();
     });
 }

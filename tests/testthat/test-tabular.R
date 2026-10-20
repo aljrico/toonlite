@@ -175,7 +175,7 @@ write_lines_tmp <- function(lines) {
 test_that("read_toon_df follows the spec by default for width and count", {
   tmp <- write_lines_tmp(c("[2]{a,b}:", "  1,2", "  3"))
   on.exit(unlink(tmp))
-  expect_error(read_toon_df(tmp), "1 values but the header declares 2 fields")
+  expect_error(read_toon_df(tmp), "1 value but the header declares 2 fields")
 
   writeLines(c("[3]{a,b}:", "  1,2", "  3,4"), tmp)
   expect_error(read_toon_df(tmp), "Declared 3 rows but found 2")

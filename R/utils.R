@@ -35,6 +35,18 @@ warn_duplicate_keys_deprecated <- function(allow_duplicate_keys) {
   invisible(NULL)
 }
 
+# The DOM decoders used to accept duplicate keys by default. The spec makes
+# them an error in strict mode and last-write-wins in non-strict mode.
+warn_decoder_duplicate_keys_deprecated <- function() {
+  warning(simpleWarning(
+    paste("`allow_duplicate_keys` is deprecated and ignored: duplicate keys",
+          "are an error when `strict = TRUE` and the last one wins when",
+          "`strict = FALSE`."),
+    sys.call(-1)
+  ))
+  invisible(NULL)
+}
+
 # Full-line `#` comments are part of the TOON spec (section 5.1) and are always
 # skipped; `//` and trailing comments are not TOON syntax. Rejecting comment
 # lines would be non-conformant, so `allow_comments = FALSE` is ignored.

@@ -9,7 +9,8 @@ validate_toon(
   is_file = FALSE,
   strict = TRUE,
   allow_comments = TRUE,
-  allow_duplicate_keys = TRUE
+  allow_duplicate_keys = TRUE,
+  indent = 2L
 )
 }
 \arguments{
@@ -17,11 +18,22 @@ validate_toon(
 
 \item{is_file}{Logical. If TRUE, x is treated as a file path.}
 
-\item{strict}{Logical. If TRUE (default), enforce strict TOON syntax.}
+\item{strict}{Logical. If TRUE (default), apply the spec's strict decoding
+rules: declared lengths must match, indentation must be a multiple of
+\code{indent} with no tabs, blank lines inside arrays and duplicate keys are
+errors. If FALSE, the spec's five non-strict recoveries apply instead
+(count mismatches accepted, duplicate keys resolve last-write-wins,
+tab/odd indentation, blank lines and depth jumps tolerated).}
 
-\item{allow_comments}{Logical. If TRUE (default), allow # and // comments.}
+\item{allow_comments}{Deprecated and ignored. Full-line \verb{#} comments are part
+of TOON and are always skipped; passing anything other than TRUE warns.}
 
-\item{allow_duplicate_keys}{Logical. If TRUE (default), allow duplicate keys.}
+\item{allow_duplicate_keys}{Deprecated and ignored. Duplicate keys are an
+error when \code{strict = TRUE} and resolve last-write-wins when
+\code{strict = FALSE}, as the spec requires. Supplying it warns.}
+
+\item{indent}{Integer. Spaces per indentation level (the spec's
+\code{indentSize}, default 2).}
 }
 \value{
 Logical scalar.
@@ -33,18 +45,16 @@ line, column, snippet, file.
 }
 }
 \description{
-Validate TOON
+Checks a document against the TOON spec (v4.4) by decoding it.
 }
 \details{
 Never throws unless there's an internal error (e.g., file unreadable).
-May warn for permissive recoveries.
 }
 \examples{
-# Valid TOON
-validate_toon('key: "value"')
+validate_toon("key: value")
 
 # Invalid TOON (returns FALSE with error attribute)
-result <- validate_toon('key: {invalid')
+result <- validate_toon("items[3]: a,b")
 if (!result) print(attr(result, "error")$message)
 
 }

@@ -28,6 +28,9 @@ namespace toonlite {
 
 constexpr size_t npos = std::string_view::npos;
 
+// Deepest nesting of objects, arrays and field groups a reader accepts.
+constexpr size_t kMaxNesting = 1000;
+
 // Decoder options shared by every reader (spec section 13).
 struct ReadOptions {
     bool strict = true;
@@ -235,21 +238,24 @@ void parse_header(std::string_view content, const LineScan& sc, bool strict,
 // Tabular rows
 // ---------------------------------------------------------------------------
 
-// Iterates the rows of a tabular array whose rows belong at `depth` (spec
-// 9.3): depth jumps (non-strict recovery 14.4), over-indented lines, lines at
-// row depth that are not rows, row widths and header spans.
+// Iterates the rows of a tabular array, or the entry rows of a keyed
+// tabular object, whose rows belong at `depth` (spec 9.3, 9.5): depth jumps
+// (non-strict recovery 14.4), over-indented lines, lines at row depth that
+// are not rows, row widths and header spans.
 class RowScanner {
 public:
     RowScanner(LineReader& r, const Header& h, size_t depth,
                bool check_width = true);
     ~RowScanner();
 
-    // Cells of the next row (views into the line, valid until the next call),
-    // or false once the scope has ended.
-    bool next(std::vector<std::string_view>& cells);
+    // Cells of the next row (views into the line, valid until the next
+    // peek of the line reader), or false once the scope has ended. For a
+    // keyed header, `key` receives the raw entry-key token.
+    bool next(std::vector<std::string_view>& cells, std::string_view* key = nullptr);
 
     size_t rows() const { return rows_; }
     size_t line_no() const { return line_no_; }
+    std::string_view line() const { return line_; }
 
 private:
     void end();
@@ -264,11 +270,15 @@ private:
     bool check_width_;
     size_t rows_ = 0;
     size_t line_no_ = 0;
+    std::string_view line_;
 };
 
-// Shared message for declared-count mismatches.
+// "1 row", "2 rows", "2 entries".
+std::string counted(size_t n, std::string_view noun);
+
+// Shared message for declared-count mismatches; `noun` is singular.
 std::string count_mismatch_message(const Header& h, size_t observed,
-                                   const char* what);
+                                   const char* noun);
 
 }  // namespace toonlite
 
