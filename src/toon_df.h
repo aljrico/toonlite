@@ -1,140 +1,127 @@
 #ifndef TOON_DF_HPP
 #define TOON_DF_HPP
 
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
-#include <optional>
-#include <cstdint>
+
 #include "toon_errors.h"
 #include "toon_io.h"
-
-#include <R.h>
-#include <Rinternals.h>
-#ifdef error
-#undef error
-#endif
-#ifdef length
-#undef length
-#endif
-#ifdef Realloc
-#undef Realloc
-#endif
-#ifdef Free
-#undef Free
-#endif
+#include "toon_lex.h"
+#include "toon_r.h"
 
 namespace toonlite {
 
-// Column type for tabular data
-enum class ColType {
-    UNKNOWN,
-    LOGICAL,
-    INTEGER,
-    DOUBLE,
-    STRING
-};
+enum class ColType { UNKNOWN, LOGICAL, INTEGER, DOUBLE, STRING };
 
-// Column builder for efficient vector construction
+// Builds one data.frame column from cell tokens. The type is inferred from
+// the values and only ever widens: logical -> integer -> double ->
+// character. Numbers and booleans that end up in a character column are
+// written in canonical TOON form.
 class ColBuilder {
 public:
-    ColBuilder(const std::string& name, size_t initial_capacity = 1000, bool strict = true);
+    explicit ColBuilder(std::string name, ColType forced = ColType::UNKNOWN);
 
     const std::string& name() const { return name_; }
-    ColType type() const { return type_; }
-    size_t size() const { return size_; }
+    size_t size() const { return n_; }
 
-    // Set value at row index, handling type promotion
-    void set(size_t row, std::string_view value);
-    void set_null(size_t row);
+    // Parse a trimmed cell token and append it. `scratch` holds decoded
+    // quoted strings.
+    void push(std::string_view token, std::string& scratch);
+    void push_null();
 
-    // Ensure capacity for n rows
-    void ensure_capacity(size_t n);
+    // Expected number of rows; storage is reserved once the type is known.
+    void reserve(size_t n);
 
-    // Finalize and create R vector
-    SEXP finalize();
+    // Drop the values but keep the allocated capacity (streaming batches).
+    void reset();
 
-    // Force specific type
-    void force_type(ColType t);
+    // Unprotected R vector with the column's values.
+    SEXP finalize() const;
 
 private:
-    void promote_to(ColType new_type);
-    void parse_and_store(size_t row, std::string_view value);
+    struct StrRef {
+        size_t off;
+        size_t len;
+    };
+    static constexpr size_t kNA = static_cast<size_t>(-1);
+
+    void set_type(ColType t);
+    void promote(ColType t);
+    void push_string(std::string_view s);
+    void push_text_of_number(const Scalar& s);
 
     std::string name_;
-    bool strict_;  // strict escape decoding for quoted strings
-    ColType type_ = ColType::UNKNOWN;
-    size_t size_ = 0;
-    size_t capacity_ = 0;
-
-    // Storage buffers (only one is active based on type)
-    std::vector<int> lgl_data_;      // 0/1/NA_LOGICAL
-    std::vector<int> int_data_;      // NA_INTEGER for NA
-    std::vector<double> dbl_data_;   // NA_REAL for NA
-    std::vector<std::string> str_data_;
-    std::vector<bool> na_mask_;      // Track NAs for all types
+    ColType forced_;
+    ColType type_;
+    size_t n_ = 0;
+    size_t reserve_ = 0;
+    std::vector<int> ints_;     // LOGICAL and INTEGER (NA_INTEGER == NA_LOGICAL)
+    std::vector<double> dbls_;  // NA_REAL for missing
+    std::vector<StrRef> strs_;  // off == kNA for missing
+    std::string pool_;
 };
 
-// Options for tabular parsing
-struct TabularParseOptions {
-    bool strict = true;
-    bool allow_comments = true;
+// Options for read_toon_df() and toon_stream_rows().
+struct TableReadOptions {
+    ReadOptions read;
     bool warn = true;
-    std::string ragged_rows = "expand_warn";  // "expand_warn" or "error"
-    std::string n_mismatch = "warn";          // "warn" or "error"
+    bool ragged_expand = false;    // ragged_rows = "expand_warn" (extension)
+    bool n_mismatch_warn = false;  // n_mismatch = "warn" in strict mode (extension)
     size_t max_extra_cols = SIZE_MAX;
-    std::optional<std::string> key;           // Extract from root[key]
-    std::vector<std::pair<std::string, ColType>> col_types;  // User-specified types
+    bool has_key = false;
+    std::string key;
+    std::vector<std::pair<std::string, ColType>> col_types;
 };
 
-// Tabular array parser
-class TabularParser {
+// Reads the tabular array at the document root, or at root[key], into column
+// builders, in one go or in batches. Nested field groups become columns named
+// by their dotted path ("customer.name").
+class TabularReader {
 public:
-    TabularParser(const TabularParseOptions& opts = TabularParseOptions());
+    TabularReader(const std::string& path, const TableReadOptions& opts);
 
-    // Parse tabular TOON from file to data.frame
-    SEXP parse_file(const std::string& filepath);
+    // Read up to `max_rows` more rows (0: all remaining). Returns the number
+    // of rows read; 0 once the table is exhausted.
+    size_t read(size_t max_rows);
 
-    // Get warnings accumulated during parsing
-    const std::vector<Warning>& warnings() const { return warnings_; }
+    // The buffered rows as a data.frame (unprotected); the builders are reset.
+    SEXP take_batch();
+
+    // Count checks, trailing content and warnings, after the last read().
+    void finish(std::vector<std::string>& warnings);
 
 private:
-    // Find tabular array in input (handles key extraction)
-    bool find_tabular_array(BufferedReader& reader, std::string& header_line, size_t& header_line_no);
+    void locate();
+    void setup_columns();
+    void add_extra_column(size_t cell_index);
 
-    // Parse tabular header [N]{field1,field2,...}:
-    bool parse_header(std::string_view header);
+    std::string path_;
+    TableReadOptions opts_;
+    BufferedReader src_;
+    LineReader lines_;
+    Header header_;
+    std::unique_ptr<RowScanner> rows_;
+    bool empty_table_ = false;
+    bool exhausted_ = false;
 
-    // Parse data rows
-    void parse_rows(BufferedReader& reader, int base_indent);
-
-    // Parse a single row line
-    void parse_row_line(std::string_view line, size_t line_no);
-
-    // Utility
-    std::vector<std::string_view> split_row(std::string_view line, char delimiter);
-    std::string_view trim(std::string_view sv);
-
-    TabularParseOptions opts_;
-    std::vector<Warning> warnings_;
-    std::string current_file_;
-
-    // Schema
-    std::vector<std::string> field_names_;
-    std::vector<ColBuilder> columns_;
-    size_t declared_rows_ = 0;
-    size_t observed_rows_ = 0;
-    char delimiter_ = ',';
-
-    // Ragged row tracking
-    size_t min_fields_ = SIZE_MAX;
-    size_t max_fields_ = 0;
-    size_t schema_expansions_ = 0;
+    std::vector<ColBuilder> cols_;
+    std::vector<int> cell_col_;  // column for each cell index, -1 if dropped
+    std::vector<std::string_view> cells_;
+    std::string scratch_;
+    size_t batch_rows_ = 0;
+    size_t total_rows_ = 0;
+    size_t min_cells_ = SIZE_MAX;
+    size_t max_cells_ = 0;
+    size_t extra_cols_ = 0;
 };
 
-// Build data.frame from column builders
-SEXP build_dataframe(std::vector<ColBuilder>& columns, size_t nrow);
+// data.frame from column builders (unprotected).
+SEXP build_dataframe(const std::vector<ColBuilder>& columns, size_t nrow);
 
-} // namespace toonlite
+}  // namespace toonlite
 
-#endif // TOON_DF_HPP
+#endif  // TOON_DF_HPP

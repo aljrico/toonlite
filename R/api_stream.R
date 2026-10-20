@@ -5,68 +5,57 @@ NULL
 
 #' Stream tabular TOON rows
 #'
-#' @param file Character scalar. Path to TOON file.
-#' @param key Character scalar or NULL. If non-NULL, extract tabular array at
-#'   root\[key\].
+#' Reads a tabular array in batches of rows, calling `callback` with each batch
+#' as a data.frame. Memory use is bounded by the batch size, not the file size.
+#' Rows are typed exactly as in [read_toon_df()], per batch.
+#'
+#' @inheritParams read_toon_df
 #' @param callback Function. Called with each batch as a data.frame.
-#'   Return value is ignored; exceptions propagate and abort parsing.
+#'   Return value is ignored; errors propagate and stop the read.
 #' @param batch_size Integer. Number of rows per batch (default 10000).
-#' @param strict Logical. If TRUE (default), enforce strict TOON syntax: tabs
-#'   in indentation are an error and quoted strings with invalid escapes are
-#'   kept verbatim, as in [read_toon_df()].
-#' @param allow_comments Logical. If TRUE (default), allow # and // comments.
-#' @param allow_duplicate_keys Deprecated and ignored; it has no effect on
-#'   tabular reads. Passing anything other than TRUE gives a warning.
-#' @param warn Logical. If TRUE (default), emit warnings.
-#' @param col_types Named character vector specifying column types.
-#' @param ragged_rows Character. How to handle rows with different field counts.
-#' @param n_mismatch Character. How to handle declared row count mismatch.
-#' @param max_extra_cols Numeric. Maximum new columns allowed.
 #'
 #' @return Invisibly returns NULL.
 #'
 #' @details
-#' Guarantees:
-#' \itemize{
-#'   \item Batches are independent and may be garbage collected
-#'   \item Stable column order within stream
-#' }
+#' The whole table is checked as it is read; a declared row count that does
+#' not match is only known at the end, so it is reported after the last
+#' batch. Column order is stable within a stream; with
+#' `ragged_rows = "expand_warn"`, later batches may have extra columns.
 #'
 #' @examples
-#' \dontrun{
-#' # Stream large file in batches
-#' toon_stream_rows("large.toon",
-#'   callback = function(batch) {
-#'     cat("Processing", nrow(batch), "rows\n")
-#'   },
-#'   batch_size = 10000
-#' )
-#' }
+#' f <- tempfile(fileext = ".toon")
+#' writeLines(c("[3]{id,name}:", "  1,Alice", "  2,Bob", "  3,Carol"), f)
+#' toon_stream_rows(f, callback = function(batch) print(nrow(batch)),
+#'                  batch_size = 2)
 #'
 #' @export
 toon_stream_rows <- function(file, key = NULL, callback, batch_size = 10000L,
                              strict = TRUE, allow_comments = TRUE,
                              allow_duplicate_keys = TRUE, warn = TRUE,
                              col_types = NULL,
-                             ragged_rows = c("expand_warn", "error"),
-                             n_mismatch = c("warn", "error"),
-                             max_extra_cols = Inf) {
+                             ragged_rows = c("error", "expand_warn"),
+                             n_mismatch = c("error", "warn"),
+                             max_extra_cols = Inf, indent = 2L) {
   check_string(file)
   file <- normalizePath(file, mustWork = TRUE)
+  if (!is.null(key)) check_string(key)
 
   if (!is.function(callback)) {
     stop("callback must be a function")
   }
 
   batch_size <- as.integer(batch_size)
-  if (batch_size < 1) batch_size <- 1L
+  if (is.na(batch_size) || batch_size < 1) batch_size <- 1L
 
   ragged_rows <- match.arg(ragged_rows)
   n_mismatch <- match.arg(n_mismatch)
+  warn_comments_deprecated(allow_comments)
   warn_duplicate_keys_deprecated(allow_duplicate_keys)
+  check_col_types(col_types)
+  indent <- check_indent(indent)
 
-  .Call(C_stream_rows, file, key, callback, batch_size, strict, allow_comments,
-        warn, col_types, ragged_rows, n_mismatch, max_extra_cols)
+  .Call(C_stream_rows, file, key, callback, batch_size, isTRUE(strict), indent,
+        isTRUE(warn), col_types, ragged_rows, n_mismatch, max_extra_cols)
 
   invisible(NULL)
 }

@@ -34,3 +34,44 @@ warn_duplicate_keys_deprecated <- function(allow_duplicate_keys) {
   }
   invisible(NULL)
 }
+
+# Full-line `#` comments are part of the TOON spec (section 5.1) and are always
+# skipped; `//` and trailing comments are not TOON syntax. Rejecting comment
+# lines would be non-conformant, so `allow_comments = FALSE` is ignored.
+warn_comments_deprecated <- function(allow_comments) {
+  if (!isTRUE(allow_comments)) {
+    warning(simpleWarning(
+      paste("`allow_comments` is deprecated and ignored: full-line `#`",
+            "comments are part of TOON and are always skipped."),
+      sys.call(-1)
+    ))
+  }
+  invisible(NULL)
+}
+
+# Spaces per indentation level (the spec's indentSize): a positive integer.
+check_indent <- function(indent, arg = "indent") {
+  if (!is.numeric(indent) || length(indent) != 1 || is.na(indent) ||
+      indent < 1 || indent != trunc(indent)) {
+    stop(simpleError(paste0("`", arg, "` must be a positive whole number"),
+                     sys.call(-1)))
+  }
+  as.integer(indent)
+}
+
+check_col_types <- function(col_types) {
+  if (!is.null(col_types)) {
+    if (!is.character(col_types) || is.null(names(col_types))) {
+      stop(simpleError("col_types must be a named character vector",
+                       sys.call(-1)))
+    }
+    bad <- setdiff(col_types, c("logical", "integer", "double", "character"))
+    if (length(bad) > 0) {
+      stop(simpleError(
+        paste0("Unknown col_types: ", paste(unique(bad), collapse = ", "),
+               ". Use \"logical\", \"integer\", \"double\" or \"character\"."),
+        sys.call(-1)))
+    }
+  }
+  invisible(col_types)
+}

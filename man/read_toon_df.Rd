@@ -12,58 +12,74 @@ read_toon_df(
   allow_duplicate_keys = TRUE,
   warn = TRUE,
   col_types = NULL,
-  ragged_rows = c("expand_warn", "error"),
-  n_mismatch = c("warn", "error"),
-  max_extra_cols = Inf
+  ragged_rows = c("error", "expand_warn"),
+  n_mismatch = c("error", "warn"),
+  max_extra_cols = Inf,
+  indent = 2L
 )
 }
 \arguments{
 \item{file}{Character scalar. Path to TOON file.}
 
-\item{key}{Character scalar or NULL. If non-NULL, extract tabular array at
-root[key] (root must be object).}
+\item{key}{Character scalar or NULL. If NULL, the document root must be a
+tabular array. Otherwise the root must be an object and the tabular array
+is read from the field \code{key} (\verb{key[N]\{fields\}:}).}
 
-\item{strict}{Logical. If TRUE (default), enforce strict TOON syntax.}
+\item{strict}{Logical. If TRUE (default), apply the spec's strict decoding
+rules: declared row counts must match, indentation must be a multiple of
+\code{indent}, tabs in indentation and blank lines between rows are errors. If
+FALSE, the spec's non-strict recoveries apply (a count mismatch warns).}
 
-\item{allow_comments}{Logical. If TRUE (default), allow # and // comments.}
+\item{allow_comments}{Deprecated and ignored. Full-line \verb{#} comments are part
+of TOON and are always skipped; passing anything other than TRUE warns.}
 
 \item{allow_duplicate_keys}{Deprecated and ignored; it has no effect on
 tabular reads. Passing anything other than TRUE gives a warning.}
 
-\item{warn}{Logical. If TRUE (default), emit warnings for schema changes.}
+\item{warn}{Logical. If TRUE (default), emit warnings for recoveries such
+as a row count mismatch accepted under \code{n_mismatch = "warn"}.}
 
 \item{col_types}{Named character vector specifying column types:
-"logical", "integer", "double", or "character".}
+"logical", "integer", "double", or "character". A "character" column keeps
+unquoted values exactly as written.}
 
-\item{ragged_rows}{Character. How to handle rows with different field counts:
+\item{ragged_rows}{Character. How to handle rows whose width differs from
+the header:
 \itemize{
-\item "expand_warn" (default): Fill missing fields with NA, expand schema
-for extra fields, emit aggregated warning.
-\item "error": Require all rows have same field count.
+\item "error" (default, as the spec requires).
+\item "expand_warn": toonlite extension, not TOON conformant. Fill
+missing fields with NA, add columns \verb{V<n>} for extra fields and warn.
 }}
 
-\item{n_mismatch}{Character. How to handle declared row count mismatch:
+\item{n_mismatch}{Character. How to handle a declared row count \verb{[N]} that
+differs from the rows found, in strict mode:
 \itemize{
-\item "warn" (default): Accept mismatch, return observed rows, emit warning.
-\item "error": Require observed row count equals declared [N].
+\item "error" (default, as the spec requires).
+\item "warn": toonlite extension, not TOON conformant. Return the rows
+found and warn.
 }}
 
-\item{max_extra_cols}{Numeric. Maximum new columns allowed via schema expansion.
-Default Inf (no limit).}
+\item{max_extra_cols}{Numeric. Maximum number of columns \code{ragged_rows = "expand_warn"} may add. Default Inf (no limit).}
+
+\item{indent}{Integer. Spaces per indentation level (the spec's
+\code{indentSize}, default 2).}
 }
 \value{
 A base data.frame.
 }
 \description{
-Read tabular TOON to data.frame
+Reads a tabular array (\verb{[N]\{fields\}:} followed by one row per line) into a
+data.frame, without building the intermediate list that \code{\link[=read_toon]{read_toon()}}
+returns. Column types are inferred from the values and only widen: logical,
+integer, double, character. Nested field groups (\verb{\{id,customer\{name\}\}})
+become columns named by their dotted path (\code{customer.name}).
 }
 \examples{
-\dontrun{
-# Read tabular TOON file
-df <- read_toon_df("data.toon")
+f <- tempfile(fileext = ".toon")
+writeLines(c("[2]{id,name}:", "  1,Alice", "  2,Bob"), f)
+read_toon_df(f)
 
-# Read nested tabular array
-df <- read_toon_df("config.toon", key = "records")
-}
+writeLines(c("users[2]{id,name}:", "  1,Alice", "  2,Bob"), f)
+read_toon_df(f, key = "users")
 
 }

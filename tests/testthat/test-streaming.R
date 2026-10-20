@@ -97,8 +97,7 @@ test_that("toon_stream_write_rows output reads back like write_toon_df", {
     if (k <= length(chunks)) chunks[[k]] else NULL
   })
 
-  # Row lines are byte-identical; only the header's row count is zero-padded
-  expect_identical(readLines(f_stream)[-1], readLines(f_df)[-1])
+  expect_identical(readLines(f_stream), readLines(f_df))
   expect_identical(read_toon_df(f_stream), read_toon_df(f_df))
 })
 
@@ -145,4 +144,46 @@ test_that("toon_stream_rows applies col_types to every batch", {
   toon_stream_rows(tmp, batch_size = 2L, col_types = c(x = "double"),
                    callback = function(b) types <<- c(types, typeof(b$x)))
   expect_identical(types, c("double", "double"))
+})
+
+test_that("toon_stream_rows propagates callback errors and keeps R usable", {
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  writeLines(c("[4]{x}:", "  1", "  2", "  3", "  4"), tmp)
+  calls <- 0L
+  expect_error(
+    toon_stream_rows(tmp, batch_size = 1L, callback = function(b) {
+      calls <<- calls + 1L
+      if (calls == 2L) stop("boom from callback")
+    }),
+    "boom from callback"
+  )
+  expect_identical(calls, 2L)
+  # Warnings and other conditions pass through unchanged too
+  expect_warning(
+    toon_stream_rows(tmp, batch_size = 4L, callback = function(b) warning("careful")),
+    "careful"
+  )
+  got <- tryCatch(
+    toon_stream_rows(tmp, batch_size = 1L, callback = function(b) {
+      signalCondition(structure(class = c("my_signal", "condition"),
+                                list(message = "sig", call = NULL)))
+    }),
+    my_signal = function(c) "caught"
+  )
+  expect_identical(got, "caught")
+})
+
+test_that("toon_stream_rows streams in batches with the same typing as read_toon_df", {
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  writeLines(c("data[5]{x,y}:", "  1,a", "  2,b", "  3,c", "  4,d", "  5,e"), tmp)
+  sizes <- integer()
+  acc <- list()
+  toon_stream_rows(tmp, key = "data", batch_size = 2L, callback = function(b) {
+    sizes <<- c(sizes, nrow(b))
+    acc[[length(acc) + 1L]] <<- b
+  })
+  expect_identical(sizes, c(2L, 2L, 1L))
+  expect_identical(do.call(rbind, acc), read_toon_df(tmp, key = "data"))
 })

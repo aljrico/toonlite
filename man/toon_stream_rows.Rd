@@ -14,63 +14,81 @@ toon_stream_rows(
   allow_duplicate_keys = TRUE,
   warn = TRUE,
   col_types = NULL,
-  ragged_rows = c("expand_warn", "error"),
-  n_mismatch = c("warn", "error"),
-  max_extra_cols = Inf
+  ragged_rows = c("error", "expand_warn"),
+  n_mismatch = c("error", "warn"),
+  max_extra_cols = Inf,
+  indent = 2L
 )
 }
 \arguments{
 \item{file}{Character scalar. Path to TOON file.}
 
-\item{key}{Character scalar or NULL. If non-NULL, extract tabular array at
-root[key].}
+\item{key}{Character scalar or NULL. If NULL, the document root must be a
+tabular array. Otherwise the root must be an object and the tabular array
+is read from the field \code{key} (\verb{key[N]\{fields\}:}).}
 
 \item{callback}{Function. Called with each batch as a data.frame.
-Return value is ignored; exceptions propagate and abort parsing.}
+Return value is ignored; errors propagate and stop the read.}
 
 \item{batch_size}{Integer. Number of rows per batch (default 10000).}
 
-\item{strict}{Logical. If TRUE (default), enforce strict TOON syntax: tabs
-in indentation are an error and quoted strings with invalid escapes are
-kept verbatim, as in \code{\link[=read_toon_df]{read_toon_df()}}.}
+\item{strict}{Logical. If TRUE (default), apply the spec's strict decoding
+rules: declared row counts must match, indentation must be a multiple of
+\code{indent}, tabs in indentation and blank lines between rows are errors. If
+FALSE, the spec's non-strict recoveries apply (a count mismatch warns).}
 
-\item{allow_comments}{Logical. If TRUE (default), allow # and // comments.}
+\item{allow_comments}{Deprecated and ignored. Full-line \verb{#} comments are part
+of TOON and are always skipped; passing anything other than TRUE warns.}
 
 \item{allow_duplicate_keys}{Deprecated and ignored; it has no effect on
 tabular reads. Passing anything other than TRUE gives a warning.}
 
-\item{warn}{Logical. If TRUE (default), emit warnings.}
+\item{warn}{Logical. If TRUE (default), emit warnings for recoveries such
+as a row count mismatch accepted under \code{n_mismatch = "warn"}.}
 
-\item{col_types}{Named character vector specifying column types.}
+\item{col_types}{Named character vector specifying column types:
+"logical", "integer", "double", or "character". A "character" column keeps
+unquoted values exactly as written.}
 
-\item{ragged_rows}{Character. How to handle rows with different field counts.}
+\item{ragged_rows}{Character. How to handle rows whose width differs from
+the header:
+\itemize{
+\item "error" (default, as the spec requires).
+\item "expand_warn": toonlite extension, not TOON conformant. Fill
+missing fields with NA, add columns \verb{V<n>} for extra fields and warn.
+}}
 
-\item{n_mismatch}{Character. How to handle declared row count mismatch.}
+\item{n_mismatch}{Character. How to handle a declared row count \verb{[N]} that
+differs from the rows found, in strict mode:
+\itemize{
+\item "error" (default, as the spec requires).
+\item "warn": toonlite extension, not TOON conformant. Return the rows
+found and warn.
+}}
 
-\item{max_extra_cols}{Numeric. Maximum new columns allowed.}
+\item{max_extra_cols}{Numeric. Maximum number of columns \code{ragged_rows = "expand_warn"} may add. Default Inf (no limit).}
+
+\item{indent}{Integer. Spaces per indentation level (the spec's
+\code{indentSize}, default 2).}
 }
 \value{
 Invisibly returns NULL.
 }
 \description{
-Stream tabular TOON rows
+Reads a tabular array in batches of rows, calling \code{callback} with each batch
+as a data.frame. Memory use is bounded by the batch size, not the file size.
+Rows are typed exactly as in \code{\link[=read_toon_df]{read_toon_df()}}, per batch.
 }
 \details{
-Guarantees:
-\itemize{
-\item Batches are independent and may be garbage collected
-\item Stable column order within stream
-}
+The whole table is checked as it is read; a declared row count that does
+not match is only known at the end, so it is reported after the last
+batch. Column order is stable within a stream; with
+\code{ragged_rows = "expand_warn"}, later batches may have extra columns.
 }
 \examples{
-\dontrun{
-# Stream large file in batches
-toon_stream_rows("large.toon",
-  callback = function(batch) {
-    cat("Processing", nrow(batch), "rows\n")
-  },
-  batch_size = 10000
-)
-}
+f <- tempfile(fileext = ".toon")
+writeLines(c("[3]{id,name}:", "  1,Alice", "  2,Bob", "  3,Carol"), f)
+toon_stream_rows(f, callback = function(batch) print(nrow(batch)),
+                 batch_size = 2)
 
 }

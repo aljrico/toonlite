@@ -154,19 +154,99 @@ test_that("read_toon_df reads INT32_MIN as double, not NA", {
   expect_identical(from_toon("x: -2147483648")$x, -2147483648)
 })
 
-test_that("read_toon_df decodes quoted strings exactly like read_toon", {
+test_that("read_toon_df decodes quoted strings and rejects invalid escapes", {
   tmp <- tempfile(fileext = ".toon")
   on.exit(unlink(tmp))
-  writeLines('[3]{s}:\n  "caf\\u00e9"\n  "\\u0041\\t"\n  "bad\\qesc"', tmp)
+  writeLines('[2]{s}:\n  "caf\\u00e9"\n  "\\u0041\\t"', tmp)
+  expect_identical(read_toon_df(tmp)$s, c("caf\u00e9", "A\t"))
 
-  for (strict in c(TRUE, FALSE)) {
-    df <- read_toon_df(tmp, strict = strict)
-    dom <- vapply(read_toon(tmp, strict = strict), function(r) r$s, character(1))
-    expect_identical(df$s, dom)
-  }
+  # Invalid escapes are errors in both modes (spec section 14.2)
+  writeLines('[1]{s}:\n  "bad\\qesc"', tmp)
+  expect_error(read_toon_df(tmp, strict = TRUE), "Invalid escape")
+  expect_error(read_toon_df(tmp, strict = FALSE), "Invalid escape")
+})
 
-  expect_identical(read_toon_df(tmp)$s[1:2], c("café", "A\t"))
-  # Invalid escape: strict keeps the raw literal, permissive decodes leniently
-  expect_identical(read_toon_df(tmp, strict = TRUE)$s[3], '"bad\\qesc"')
-  expect_identical(read_toon_df(tmp, strict = FALSE)$s[3], "bad\\qesc")
+write_lines_tmp <- function(lines) {
+  tmp <- tempfile(fileext = ".toon")
+  writeLines(lines, tmp)
+  tmp
+}
+
+test_that("read_toon_df follows the spec by default for width and count", {
+  tmp <- write_lines_tmp(c("[2]{a,b}:", "  1,2", "  3"))
+  on.exit(unlink(tmp))
+  expect_error(read_toon_df(tmp), "1 values but the header declares 2 fields")
+
+  writeLines(c("[3]{a,b}:", "  1,2", "  3,4"), tmp)
+  expect_error(read_toon_df(tmp), "Declared 3 rows but found 2")
+  # Non-strict decoding accepts the rows found (spec recovery), with a warning
+  expect_warning(df <- read_toon_df(tmp, strict = FALSE), "Declared 3 rows")
+  expect_identical(df$a, c(1L, 3L))
+  expect_silent(read_toon_df(tmp, strict = FALSE, warn = FALSE))
+})
+
+test_that("read_toon_df reads root[key] with the v4 header syntax", {
+  tmp <- write_lines_tmp(c(
+    "meta:", "  n: 2",
+    "users[2]{id,name}:", "  1,Alice", "  2,\"Bob, Jr.\"",
+    "after: true"
+  ))
+  on.exit(unlink(tmp))
+  df <- read_toon_df(tmp, key = "users")
+  expect_identical(df, data.frame(id = 1:2, name = c("Alice", "Bob, Jr.")))
+  expect_error(read_toon_df(tmp, key = "nope"), "Key not found: nope")
+  expect_error(read_toon_df(tmp, key = "meta"), "not a tabular array")
+  expect_error(read_toon_df(tmp), "root is not a tabular array")
+})
+
+test_that("read_toon_df handles delimiters, nested groups and comments", {
+  tmp <- write_lines_tmp(c(
+    "# orders",
+    "[2|]{id|customer{name|tier}}:",
+    "  1|Ann|gold",
+    "  # a comment between rows does not end them",
+    "  2|\"B|b\"|null"
+  ))
+  on.exit(unlink(tmp))
+  df <- read_toon_df(tmp)
+  expect_identical(names(df), c("id", "customer.name", "customer.tier"))
+  expect_identical(df$customer.name, c("Ann", "B|b"))
+  expect_identical(df$customer.tier, c("gold", NA))
+})
+
+test_that("read_toon_df reads empty tables and rejects trailing content", {
+  tmp <- write_lines_tmp("[]")
+  on.exit(unlink(tmp))
+  expect_identical(dim(read_toon_df(tmp)), c(0L, 0L))
+
+  writeLines(c("rows: []"), tmp)
+  expect_identical(nrow(read_toon_df(tmp, key = "rows")), 0L)
+
+  writeLines(c("[1]{a}:", "  1", "b: 2"), tmp)
+  expect_error(read_toon_df(tmp), "Unexpected content after the root array")
+})
+
+test_that("read_toon_df honours indent and canonicalises numbers in text columns", {
+  tmp <- write_lines_tmp(c("[3]{x}:", "    1", "    2.50", "    abc"))
+  on.exit(unlink(tmp))
+  expect_error(read_toon_df(tmp, indent = 4L, strict = TRUE), NA)
+  expect_error(read_toon_df(tmp), "Indentation jumps")
+  expect_identical(read_toon_df(tmp, indent = 4L)$x, c("1", "2.5", "abc"))
+  expect_identical(read_toon_df(tmp, indent = 4L, col_types = c(x = "character"))$x,
+                   c("1", "2.50", "abc"))
+  expect_error(read_toon_df(tmp, indent = 0), "positive whole number")
+})
+
+test_that("read_toon_df keeps doubles exact when a column turns character", {
+  tmp <- write_lines_tmp(c("[3]{x}:", "  0.1", "  123456789.123", "  z"))
+  on.exit(unlink(tmp))
+  expect_identical(read_toon_df(tmp)$x, c("0.1", "123456789.123", "z"))
+})
+
+test_that("allow_comments is deprecated in the tabular readers", {
+  tmp <- write_lines_tmp(c("[1]{a}:", "  1"))
+  on.exit(unlink(tmp))
+  expect_warning(read_toon_df(tmp, allow_comments = FALSE), "allow_comments")
+  expect_warning(toon_stream_rows(tmp, callback = identity, allow_comments = FALSE),
+                 "allow_comments")
 })

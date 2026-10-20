@@ -5,62 +5,77 @@ NULL
 
 #' Read tabular TOON to data.frame
 #'
+#' Reads a tabular array (`[N]{fields}:` followed by one row per line) into a
+#' data.frame, without building the intermediate list that [read_toon()]
+#' returns. Column types are inferred from the values and only widen: logical,
+#' integer, double, character. Nested field groups (`{id,customer{name}}`)
+#' become columns named by their dotted path (`customer.name`).
+#'
 #' @param file Character scalar. Path to TOON file.
-#' @param key Character scalar or NULL. If non-NULL, extract tabular array at
-#'   root\[key\] (root must be object).
-#' @param strict Logical. If TRUE (default), enforce strict TOON syntax.
-#' @param allow_comments Logical. If TRUE (default), allow # and // comments.
+#' @param key Character scalar or NULL. If NULL, the document root must be a
+#'   tabular array. Otherwise the root must be an object and the tabular array
+#'   is read from the field `key` (`key[N]{fields}:`).
+#' @param strict Logical. If TRUE (default), apply the spec's strict decoding
+#'   rules: declared row counts must match, indentation must be a multiple of
+#'   `indent`, tabs in indentation and blank lines between rows are errors. If
+#'   FALSE, the spec's non-strict recoveries apply (a count mismatch warns).
+#' @param allow_comments Deprecated and ignored. Full-line `#` comments are part
+#'   of TOON and are always skipped; passing anything other than TRUE warns.
 #' @param allow_duplicate_keys Deprecated and ignored; it has no effect on
 #'   tabular reads. Passing anything other than TRUE gives a warning.
-#' @param warn Logical. If TRUE (default), emit warnings for schema changes.
+#' @param warn Logical. If TRUE (default), emit warnings for recoveries such
+#'   as a row count mismatch accepted under `n_mismatch = "warn"`.
 #' @param col_types Named character vector specifying column types:
-#'   "logical", "integer", "double", or "character".
-#' @param ragged_rows Character. How to handle rows with different field counts:
+#'   "logical", "integer", "double", or "character". A "character" column keeps
+#'   unquoted values exactly as written.
+#' @param ragged_rows Character. How to handle rows whose width differs from
+#'   the header:
 #'   \itemize{
-#'     \item "expand_warn" (default): Fill missing fields with NA, expand schema
-#'       for extra fields, emit aggregated warning.
-#'     \item "error": Require all rows have same field count.
+#'     \item "error" (default, as the spec requires).
+#'     \item "expand_warn": toonlite extension, not TOON conformant. Fill
+#'       missing fields with NA, add columns `V<n>` for extra fields and warn.
 #'   }
-#' @param n_mismatch Character. How to handle declared row count mismatch:
+#' @param n_mismatch Character. How to handle a declared row count `[N]` that
+#'   differs from the rows found, in strict mode:
 #'   \itemize{
-#'     \item "warn" (default): Accept mismatch, return observed rows, emit warning.
-#'     \item "error": Require observed row count equals declared \[N\].
+#'     \item "error" (default, as the spec requires).
+#'     \item "warn": toonlite extension, not TOON conformant. Return the rows
+#'       found and warn.
 #'   }
-#' @param max_extra_cols Numeric. Maximum new columns allowed via schema expansion.
-#'   Default Inf (no limit).
+#' @param max_extra_cols Numeric. Maximum number of columns `ragged_rows =
+#'   "expand_warn"` may add. Default Inf (no limit).
+#' @param indent Integer. Spaces per indentation level (the spec's
+#'   `indentSize`, default 2).
 #'
 #' @return A base data.frame.
 #'
 #' @examples
-#' \dontrun{
-#' # Read tabular TOON file
-#' df <- read_toon_df("data.toon")
+#' f <- tempfile(fileext = ".toon")
+#' writeLines(c("[2]{id,name}:", "  1,Alice", "  2,Bob"), f)
+#' read_toon_df(f)
 #'
-#' # Read nested tabular array
-#' df <- read_toon_df("config.toon", key = "records")
-#' }
+#' writeLines(c("users[2]{id,name}:", "  1,Alice", "  2,Bob"), f)
+#' read_toon_df(f, key = "users")
 #'
 #' @export
 read_toon_df <- function(file, key = NULL, strict = TRUE, allow_comments = TRUE,
                          allow_duplicate_keys = TRUE, warn = TRUE, col_types = NULL,
-                         ragged_rows = c("expand_warn", "error"),
-                         n_mismatch = c("warn", "error"),
-                         max_extra_cols = Inf) {
+                         ragged_rows = c("error", "expand_warn"),
+                         n_mismatch = c("error", "warn"),
+                         max_extra_cols = Inf, indent = 2L) {
   check_string(file)
   file <- normalizePath(file, mustWork = TRUE)
+  if (!is.null(key)) check_string(key)
 
   ragged_rows <- match.arg(ragged_rows)
   n_mismatch <- match.arg(n_mismatch)
+  warn_comments_deprecated(allow_comments)
   warn_duplicate_keys_deprecated(allow_duplicate_keys)
+  check_col_types(col_types)
+  indent <- check_indent(indent)
 
-  if (!is.null(col_types)) {
-    if (!is.character(col_types) || is.null(names(col_types))) {
-      stop("col_types must be a named character vector")
-    }
-  }
-
-  .Call(C_read_toon_df, file, key, strict, allow_comments, warn, col_types,
-        ragged_rows, n_mismatch, max_extra_cols)
+  .Call(C_read_toon_df, file, key, isTRUE(strict), indent, isTRUE(warn),
+        col_types, ragged_rows, n_mismatch, max_extra_cols)
 }
 
 #' Write data.frame to tabular TOON

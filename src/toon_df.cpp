@@ -1,787 +1,500 @@
 #include "toon_df.h"
-#include "toon_charconv.h"
-#include <charconv>
+#include "toon_number.h"
+
 #include <algorithm>
-#include <cctype>
-#include <cmath>
+#include <charconv>
 
 namespace toonlite {
 
-// ColBuilder implementation
-ColBuilder::ColBuilder(const std::string& name, size_t initial_capacity, bool strict)
-    : name_(name), strict_(strict), capacity_(initial_capacity) {
-    na_mask_.reserve(initial_capacity);
-}
+namespace {
 
-void ColBuilder::ensure_capacity(size_t n) {
-    if (n <= capacity_) return;
+// Never reserve in proportion to an attacker-controlled declared length
+// before the rows exist (spec section 15).
+constexpr size_t kMaxReserve = 1 << 16;
 
-    size_t new_cap = std::max(n, capacity_ * 2);
-    capacity_ = new_cap;
+}  // namespace
 
+// ---------------------------------------------------------------------------
+// ColBuilder
+// ---------------------------------------------------------------------------
+
+ColBuilder::ColBuilder(std::string name, ColType forced)
+    : name_(std::move(name)), forced_(forced), type_(forced) {}
+
+void ColBuilder::reserve(size_t n) {
+    reserve_ = n;
     switch (type_) {
         case ColType::LOGICAL:
-            lgl_data_.reserve(new_cap);
-            break;
+        case ColType::INTEGER: ints_.reserve(n); break;
+        case ColType::DOUBLE: dbls_.reserve(n); break;
+        case ColType::STRING: strs_.reserve(n); break;
+        case ColType::UNKNOWN: break;
+    }
+}
+
+void ColBuilder::reset() {
+    ints_.clear();
+    dbls_.clear();
+    strs_.clear();
+    pool_.clear();
+    n_ = 0;
+    type_ = forced_;
+}
+
+// From UNKNOWN: the n_ values seen so far were all null.
+void ColBuilder::set_type(ColType t) {
+    type_ = t;
+    switch (t) {
+        case ColType::LOGICAL:
         case ColType::INTEGER:
-            int_data_.reserve(new_cap);
+            ints_.reserve(std::max(reserve_, n_));
+            ints_.assign(n_, NA_INTEGER);
             break;
         case ColType::DOUBLE:
-            dbl_data_.reserve(new_cap);
+            dbls_.reserve(std::max(reserve_, n_));
+            dbls_.assign(n_, NA_REAL);
             break;
         case ColType::STRING:
-            str_data_.reserve(new_cap);
+            strs_.reserve(std::max(reserve_, n_));
+            strs_.assign(n_, StrRef{kNA, 0});
             break;
-        default:
+        case ColType::UNKNOWN:
             break;
     }
-    na_mask_.reserve(new_cap);
 }
 
-void ColBuilder::promote_to(ColType new_type) {
-    if (new_type == type_) return;
-
-    switch (new_type) {
+void ColBuilder::promote(ColType t) {
+    if (type_ == t) return;
+    if (type_ == ColType::UNKNOWN) {
+        set_type(t);
+        return;
+    }
+    char buf[kNumberBufSize];
+    switch (t) {
         case ColType::INTEGER:
-            if (type_ == ColType::LOGICAL) {
-                // Logical -> Integer
-                int_data_.resize(size_);
-                for (size_t i = 0; i < size_; i++) {
-                    if (na_mask_[i]) {
-                        int_data_[i] = NA_INTEGER;
-                    } else {
-                        int_data_[i] = lgl_data_[i];
-                    }
-                }
-                lgl_data_.clear();
-            }
+            // LOGICAL -> INTEGER: TRUE/FALSE are already 1/0 and NA_LOGICAL
+            // equals NA_INTEGER.
             break;
-
         case ColType::DOUBLE:
-            if (type_ == ColType::LOGICAL) {
-                dbl_data_.resize(size_);
-                for (size_t i = 0; i < size_; i++) {
-                    if (na_mask_[i]) {
-                        dbl_data_[i] = NA_REAL;
-                    } else {
-                        dbl_data_[i] = static_cast<double>(lgl_data_[i]);
-                    }
-                }
-                lgl_data_.clear();
-            } else if (type_ == ColType::INTEGER) {
-                dbl_data_.resize(size_);
-                for (size_t i = 0; i < size_; i++) {
-                    if (na_mask_[i]) {
-                        dbl_data_[i] = NA_REAL;
-                    } else {
-                        dbl_data_[i] = static_cast<double>(int_data_[i]);
-                    }
-                }
-                int_data_.clear();
+            dbls_.reserve(std::max(reserve_, n_));
+            dbls_.resize(n_);
+            for (size_t i = 0; i < n_; i++) {
+                dbls_[i] = ints_[i] == NA_INTEGER ? NA_REAL : static_cast<double>(ints_[i]);
             }
+            ints_.clear();
             break;
-
         case ColType::STRING:
-            str_data_.resize(size_);
-            if (type_ == ColType::LOGICAL) {
-                for (size_t i = 0; i < size_; i++) {
-                    if (na_mask_[i]) {
-                        str_data_[i] = "";  // NA marker
+            strs_.reserve(std::max(reserve_, n_));
+            strs_.clear();
+            for (size_t i = 0; i < n_; i++) {
+                std::string_view text;
+                bool na = false;
+                if (type_ == ColType::DOUBLE) {
+                    const double d = dbls_[i];
+                    if (ISNA(d)) {
+                        na = true;
                     } else {
-                        str_data_[i] = lgl_data_[i] ? "true" : "false";
+                        text = std::string_view(buf, format_double(d, buf));
                     }
-                }
-                lgl_data_.clear();
-            } else if (type_ == ColType::INTEGER) {
-                for (size_t i = 0; i < size_; i++) {
-                    if (na_mask_[i]) {
-                        str_data_[i] = "";
-                    } else {
-                        str_data_[i] = std::to_string(int_data_[i]);
-                    }
-                }
-                int_data_.clear();
-            } else if (type_ == ColType::DOUBLE) {
-                for (size_t i = 0; i < size_; i++) {
-                    if (na_mask_[i]) {
-                        str_data_[i] = "";
-                    } else {
-                        str_data_[i] = std::to_string(dbl_data_[i]);
-                    }
-                }
-                dbl_data_.clear();
-            }
-            break;
-
-        default:
-            break;
-    }
-
-    type_ = new_type;
-}
-
-void ColBuilder::force_type(ColType t) {
-    if (type_ == ColType::UNKNOWN) {
-        type_ = t;
-    } else if (type_ != t) {
-        promote_to(t);
-    }
-}
-
-void ColBuilder::set_null(size_t row) {
-    ensure_capacity(row + 1);
-
-    // Extend size if needed
-    while (size_ <= row) {
-        na_mask_.push_back(true);
-        switch (type_) {
-            case ColType::LOGICAL: lgl_data_.push_back(NA_LOGICAL); break;
-            case ColType::INTEGER: int_data_.push_back(NA_INTEGER); break;
-            case ColType::DOUBLE: dbl_data_.push_back(NA_REAL); break;
-            case ColType::STRING: str_data_.push_back(""); break;
-            case ColType::UNKNOWN:
-                // First value is null - defer type decision
-                lgl_data_.push_back(NA_LOGICAL);
-                break;
-        }
-        size_++;
-    }
-
-    na_mask_[row] = true;
-    switch (type_) {
-        case ColType::LOGICAL: lgl_data_[row] = NA_LOGICAL; break;
-        case ColType::INTEGER: int_data_[row] = NA_INTEGER; break;
-        case ColType::DOUBLE: dbl_data_[row] = NA_REAL; break;
-        case ColType::STRING: str_data_[row] = ""; break;
-        case ColType::UNKNOWN: lgl_data_[row] = NA_LOGICAL; break;
-    }
-}
-
-void ColBuilder::parse_and_store(size_t row, std::string_view value) {
-    // Trim whitespace
-    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.front()))) {
-        value.remove_prefix(1);
-    }
-    while (!value.empty() && std::isspace(static_cast<unsigned char>(value.back()))) {
-        value.remove_suffix(1);
-    }
-
-    // Check for null
-    if (value == "null") {
-        set_null(row);
-        return;
-    }
-
-    // Check for boolean
-    if (value == "true") {
-        if (type_ == ColType::UNKNOWN) {
-            type_ = ColType::LOGICAL;
-            lgl_data_.resize(row + 1, NA_LOGICAL);
-            na_mask_.resize(row + 1, true);
-        } else if (type_ != ColType::LOGICAL) {
-            if (type_ == ColType::INTEGER) {
-                promote_to(ColType::INTEGER);
-                int_data_.resize(row + 1, NA_INTEGER);
-                int_data_[row] = 1;
-                na_mask_[row] = false;
-                if (row >= size_) size_ = row + 1;
-                return;
-            } else if (type_ == ColType::DOUBLE) {
-                dbl_data_.resize(row + 1, NA_REAL);
-                dbl_data_[row] = 1.0;
-                na_mask_[row] = false;
-                if (row >= size_) size_ = row + 1;
-                return;
-            } else {
-                promote_to(ColType::STRING);
-                str_data_.resize(row + 1, "");
-                str_data_[row] = "true";
-                na_mask_[row] = false;
-                if (row >= size_) size_ = row + 1;
-                return;
-            }
-        }
-        lgl_data_.resize(row + 1, NA_LOGICAL);
-        na_mask_.resize(row + 1, true);
-        lgl_data_[row] = 1;
-        na_mask_[row] = false;
-        if (row >= size_) size_ = row + 1;
-        return;
-    }
-
-    if (value == "false") {
-        if (type_ == ColType::UNKNOWN) {
-            type_ = ColType::LOGICAL;
-            lgl_data_.resize(row + 1, NA_LOGICAL);
-            na_mask_.resize(row + 1, true);
-        } else if (type_ != ColType::LOGICAL) {
-            if (type_ == ColType::INTEGER) {
-                int_data_.resize(row + 1, NA_INTEGER);
-                int_data_[row] = 0;
-                na_mask_[row] = false;
-                if (row >= size_) size_ = row + 1;
-                return;
-            } else if (type_ == ColType::DOUBLE) {
-                dbl_data_.resize(row + 1, NA_REAL);
-                dbl_data_[row] = 0.0;
-                na_mask_[row] = false;
-                if (row >= size_) size_ = row + 1;
-                return;
-            } else {
-                promote_to(ColType::STRING);
-                str_data_.resize(row + 1, "");
-                str_data_[row] = "false";
-                na_mask_[row] = false;
-                if (row >= size_) size_ = row + 1;
-                return;
-            }
-        }
-        lgl_data_.resize(row + 1, NA_LOGICAL);
-        na_mask_.resize(row + 1, true);
-        lgl_data_[row] = 0;
-        na_mask_[row] = false;
-        if (row >= size_) size_ = row + 1;
-        return;
-    }
-
-    // Check for quoted string. Decode exactly like the DOM parser: if the
-    // literal has an invalid escape in strict mode, keep the raw text, as
-    // read_toon() does for tabular cells.
-    if (value.size() >= 2 && value.front() == '"' && value.back() == '"') {
-        auto unquoted = unescape_quoted_string(value, strict_);
-
-        promote_to(ColType::STRING);
-        str_data_.resize(row + 1, "");
-        na_mask_.resize(row + 1, true);
-        str_data_[row] = unquoted ? std::move(*unquoted) : std::string(value);
-        na_mask_[row] = false;
-        if (row >= size_) size_ = row + 1;
-        return;
-    }
-
-    // Try to parse as integer
-    bool has_decimal = false;
-    bool has_exp = false;
-    for (char c : value) {
-        if (c == '.') has_decimal = true;
-        if (c == 'e' || c == 'E') has_exp = true;
-    }
-
-    if (!has_decimal && !has_exp) {
-        int64_t int_val;
-        auto result = std::from_chars(value.data(), value.data() + value.size(), int_val);
-        if (result.ec == std::errc{} && result.ptr == value.data() + value.size()) {
-            // INT32_MIN is R's NA_integer_: exclude it (like the DOM parser)
-            // so it falls through to double instead of silently becoming NA.
-            if (int_val > INT32_MIN && int_val <= INT32_MAX) {
-                if (type_ == ColType::UNKNOWN) {
-                    type_ = ColType::INTEGER;
-                    int_data_.resize(row + 1, NA_INTEGER);
-                    na_mask_.resize(row + 1, true);
-                } else if (type_ == ColType::LOGICAL) {
-                    promote_to(ColType::INTEGER);
-                    int_data_.resize(row + 1, NA_INTEGER);
-                    na_mask_.resize(row + 1, true);
-                } else if (type_ == ColType::DOUBLE) {
-                    dbl_data_.resize(row + 1, NA_REAL);
-                    na_mask_.resize(row + 1, true);
-                    dbl_data_[row] = static_cast<double>(int_val);
-                    na_mask_[row] = false;
-                    if (row >= size_) size_ = row + 1;
-                    return;
-                } else if (type_ == ColType::STRING) {
-                    str_data_.resize(row + 1, "");
-                    na_mask_.resize(row + 1, true);
-                    str_data_[row] = std::string(value);
-                    na_mask_[row] = false;
-                    if (row >= size_) size_ = row + 1;
-                    return;
-                }
-
-                int_data_.resize(row + 1, NA_INTEGER);
-                na_mask_.resize(row + 1, true);
-                int_data_[row] = static_cast<int>(int_val);
-                na_mask_[row] = false;
-                if (row >= size_) size_ = row + 1;
-                return;
-            }
-        }
-    }
-
-    // Try to parse as double
-    double dbl_val;
-    auto result = double_from_chars(value.data(), value.data() + value.size(), dbl_val);
-    if (result.ec == std::errc{} && result.ptr == value.data() + value.size()) {
-        if (type_ == ColType::UNKNOWN || type_ == ColType::LOGICAL || type_ == ColType::INTEGER) {
-            promote_to(ColType::DOUBLE);
-            dbl_data_.resize(row + 1, NA_REAL);
-            na_mask_.resize(row + 1, true);
-        } else if (type_ == ColType::STRING) {
-            str_data_.resize(row + 1, "");
-            na_mask_.resize(row + 1, true);
-            str_data_[row] = std::string(value);
-            na_mask_[row] = false;
-            if (row >= size_) size_ = row + 1;
-            return;
-        }
-
-        dbl_data_.resize(row + 1, NA_REAL);
-        na_mask_.resize(row + 1, true);
-        dbl_data_[row] = dbl_val;
-        na_mask_[row] = false;
-        if (row >= size_) size_ = row + 1;
-        return;
-    }
-
-    // Treat as string (unquoted)
-    promote_to(ColType::STRING);
-    str_data_.resize(row + 1, "");
-    na_mask_.resize(row + 1, true);
-    str_data_[row] = std::string(value);
-    na_mask_[row] = false;
-    if (row >= size_) size_ = row + 1;
-}
-
-void ColBuilder::set(size_t row, std::string_view value) {
-    ensure_capacity(row + 1);
-    parse_and_store(row, value);
-}
-
-SEXP ColBuilder::finalize() {
-    SEXP result;
-
-    // Default to logical if still unknown
-    if (type_ == ColType::UNKNOWN) {
-        type_ = ColType::LOGICAL;
-    }
-
-    switch (type_) {
-        case ColType::LOGICAL: {
-            result = PROTECT(Rf_allocVector(LGLSXP, size_));
-            int* out = LOGICAL(result);
-            for (size_t i = 0; i < size_; i++) {
-                out[i] = na_mask_[i] ? NA_LOGICAL : lgl_data_[i];
-            }
-            UNPROTECT(1);
-            break;
-        }
-        case ColType::INTEGER: {
-            result = PROTECT(Rf_allocVector(INTSXP, size_));
-            int* out = INTEGER(result);
-            for (size_t i = 0; i < size_; i++) {
-                out[i] = na_mask_[i] ? NA_INTEGER : int_data_[i];
-            }
-            UNPROTECT(1);
-            break;
-        }
-        case ColType::DOUBLE: {
-            result = PROTECT(Rf_allocVector(REALSXP, size_));
-            double* out = REAL(result);
-            for (size_t i = 0; i < size_; i++) {
-                out[i] = na_mask_[i] ? NA_REAL : dbl_data_[i];
-            }
-            UNPROTECT(1);
-            break;
-        }
-        case ColType::STRING: {
-            result = PROTECT(Rf_allocVector(STRSXP, size_));
-            for (size_t i = 0; i < size_; i++) {
-                if (na_mask_[i]) {
-                    SET_STRING_ELT(result, i, NA_STRING);
                 } else {
-                    SET_STRING_ELT(result, i, Rf_mkCharCE(str_data_[i].c_str(), CE_UTF8));
-                }
-            }
-            UNPROTECT(1);
-            break;
-        }
-        default:
-            result = R_NilValue;
-            break;
-    }
-
-    return result;
-}
-
-// TabularParser implementation
-TabularParser::TabularParser(const TabularParseOptions& opts)
-    : opts_(opts) {}
-
-std::string_view TabularParser::trim(std::string_view sv) {
-    while (!sv.empty() && std::isspace(static_cast<unsigned char>(sv.front()))) {
-        sv.remove_prefix(1);
-    }
-    while (!sv.empty() && std::isspace(static_cast<unsigned char>(sv.back()))) {
-        sv.remove_suffix(1);
-    }
-    return sv;
-}
-
-bool TabularParser::parse_header(std::string_view header) {
-    header = trim(header);
-
-    // Format: [N]{field1,field2,...}:
-    if (header.empty() || header[0] != '[') {
-        return false;
-    }
-
-    size_t pos = 1;
-
-    // Parse N
-    while (pos < header.size() && std::isdigit(static_cast<unsigned char>(header[pos]))) {
-        pos++;
-    }
-
-    if (pos > 1) {
-        auto result = std::from_chars(header.data() + 1, header.data() + pos, declared_rows_);
-        (void)result;
-    }
-
-    // Expect ]
-    if (pos >= header.size() || header[pos] != ']') {
-        return false;
-    }
-    pos++;
-
-    // Must have {fields}
-    if (pos >= header.size() || header[pos] != '{') {
-        return false;
-    }
-    pos++;
-
-    // Find closing }
-    size_t field_end = header.find('}', pos);
-    if (field_end == std::string_view::npos) {
-        return false;
-    }
-
-    std::string_view fields_str = header.substr(pos, field_end - pos);
-
-    // Parse comma-separated fields
-    while (!fields_str.empty()) {
-        size_t comma = fields_str.find(',');
-        std::string_view field = (comma != std::string_view::npos)
-            ? fields_str.substr(0, comma)
-            : fields_str;
-        field = trim(field);
-        if (!field.empty()) {
-            field_names_.push_back(std::string(field));
-        }
-        if (comma != std::string_view::npos) {
-            fields_str = fields_str.substr(comma + 1);
-        } else {
-            break;
-        }
-    }
-
-    // Create column builders
-    for (const auto& name : field_names_) {
-        columns_.emplace_back(name, std::max(size_t(1000), declared_rows_), opts_.strict);
-    }
-
-    // Apply user-specified column types
-    for (const auto& [name, type] : opts_.col_types) {
-        for (auto& col : columns_) {
-            if (col.name() == name) {
-                col.force_type(type);
-                break;
-            }
-        }
-    }
-
-    return !field_names_.empty();
-}
-
-std::vector<std::string_view> TabularParser::split_row(std::string_view line, char delimiter) {
-    std::vector<std::string_view> fields;
-
-    size_t start = 0;
-    bool in_string = false;
-    bool escape = false;
-
-    for (size_t i = 0; i < line.size(); i++) {
-        char c = line[i];
-
-        if (escape) {
-            escape = false;
-            continue;
-        }
-
-        if (c == '\\' && in_string) {
-            escape = true;
-            continue;
-        }
-
-        if (c == '"') {
-            in_string = !in_string;
-            continue;
-        }
-
-        if (!in_string && c == delimiter) {
-            fields.push_back(trim(line.substr(start, i - start)));
-            start = i + 1;
-        }
-    }
-
-    // Last field
-    if (start <= line.size()) {
-        fields.push_back(trim(line.substr(start)));
-    }
-
-    return fields;
-}
-
-void TabularParser::parse_row_line(std::string_view line, size_t line_no) {
-    auto fields = split_row(line, delimiter_);
-    size_t n_fields = fields.size();
-
-    // Track min/max fields
-    if (n_fields < min_fields_) min_fields_ = n_fields;
-    if (n_fields > max_fields_) max_fields_ = n_fields;
-
-    // Handle ragged rows
-    if (n_fields != columns_.size()) {
-        if (opts_.ragged_rows == "error") {
-            throw ParseError("Row has " + std::to_string(n_fields) + " fields but expected " +
-                std::to_string(columns_.size()), line_no, 0, "", current_file_);
-        }
-
-        // expand_warn mode
-        if (n_fields > columns_.size()) {
-            // Expand schema
-            size_t extra = n_fields - columns_.size();
-            if (schema_expansions_ + extra > opts_.max_extra_cols) {
-                throw ParseError("max_extra_cols exceeded", line_no, 0, "", current_file_);
-            }
-
-            for (size_t i = columns_.size(); i < n_fields; i++) {
-                std::string new_name = "V" + std::to_string(i + 1);
-                columns_.emplace_back(new_name, std::max(size_t(1000), declared_rows_), opts_.strict);
-                field_names_.push_back(new_name);
-
-                // Backfill with NA
-                for (size_t r = 0; r < observed_rows_; r++) {
-                    columns_.back().set_null(r);
-                }
-            }
-            schema_expansions_ += extra;
-        }
-    }
-
-    // Store values
-    size_t row = observed_rows_;
-    for (size_t i = 0; i < columns_.size(); i++) {
-        if (i < n_fields) {
-            columns_[i].set(row, fields[i]);
-        } else {
-            columns_[i].set_null(row);
-        }
-    }
-
-    observed_rows_++;
-}
-
-bool TabularParser::find_tabular_array(BufferedReader& reader, std::string& header_line, size_t& header_line_no) {
-    std::string_view line;
-    size_t line_no;
-
-    // If key is specified, need to find root[key] first
-    if (opts_.key.has_value()) {
-        std::string target_key = opts_.key.value();
-        bool found_key = false;
-
-        while (reader.next_line(line, line_no)) {
-            // Skip empty lines and comments
-            auto trimmed = trim(line);
-            if (trimmed.empty()) continue;
-            if (opts_.allow_comments && (trimmed[0] == '#' ||
-                (trimmed.size() >= 2 && trimmed[0] == '/' && trimmed[1] == '/'))) {
-                continue;
-            }
-
-            // Look for "key:"
-            size_t colon = trimmed.find(':');
-            if (colon != std::string_view::npos) {
-                auto key = trim(trimmed.substr(0, colon));
-                if (key == target_key) {
-                    found_key = true;
-                    // Check if value is inline
-                    auto value = trim(trimmed.substr(colon + 1));
-                    if (!value.empty() && value[0] == '[') {
-                        header_line = std::string(value);
-                        header_line_no = line_no;
-                        return true;
+                    const int v = ints_[i];
+                    if (v == NA_INTEGER) {
+                        na = true;
+                    } else if (type_ == ColType::LOGICAL) {
+                        text = v ? "true" : "false";
+                    } else {
+                        text = std::string_view(buf, format_int64(v, buf));
                     }
-                    // Value is on next line(s)
-                    break;
+                }
+                if (na) {
+                    strs_.push_back(StrRef{kNA, 0});
+                } else {
+                    strs_.push_back(StrRef{pool_.size(), text.size()});
+                    pool_.append(text.data(), text.size());
                 }
             }
-        }
-
-        if (!found_key) {
-            throw ParseError("Key not found: " + target_key, 0, 0, "", current_file_);
-        }
+            ints_.clear();
+            dbls_.clear();
+            break;
+        default:
+            break;
     }
-
-    // Find tabular header
-    while (reader.next_line(line, line_no)) {
-        auto trimmed = trim(line);
-        if (trimmed.empty()) continue;
-        if (opts_.allow_comments && (trimmed[0] == '#' ||
-            (trimmed.size() >= 2 && trimmed[0] == '/' && trimmed[1] == '/'))) {
-            continue;
-        }
-
-        // Check for tabular array header [N]{...}:
-        if (trimmed[0] == '[') {
-            // Find { and }
-            auto brace_start = trimmed.find('{');
-            auto brace_end = trimmed.find('}');
-            if (brace_start != std::string_view::npos && brace_end != std::string_view::npos) {
-                header_line = std::string(trimmed);
-                header_line_no = line_no;
-                return true;
-            }
-        }
-    }
-
-    return false;
+    type_ = t;
 }
 
-void TabularParser::parse_rows(BufferedReader& reader, int base_indent) {
-    std::string_view line;
-    size_t line_no;
+void ColBuilder::push_string(std::string_view s) {
+    strs_.push_back(StrRef{pool_.size(), s.size()});
+    pool_.append(s.data(), s.size());
+    n_++;
+}
 
-    while (reader.next_line(line, line_no)) {
-        // Count indentation
-        size_t indent = 0;
-        for (char c : line) {
-            if (c == ' ') {
-                indent++;
-            } else if (c == '\t') {
-                if (opts_.strict) {
-                    throw ParseError("Tab characters not allowed in indentation", line_no);
-                }
-                indent++;
+void ColBuilder::push_text_of_number(const Scalar& s) {
+    char buf[kNumberBufSize];
+    switch (s.kind) {
+        case ScalarKind::Bool: push_string(s.b ? "true" : "false"); break;
+        case ScalarKind::Int: push_string(std::string_view(buf, format_int64(s.i, buf))); break;
+        case ScalarKind::Double:
+            if (std::isfinite(s.d)) {
+                push_string(std::string_view(buf, format_double(s.d, buf)));
             } else {
-                break;
+                push_string(s.d > 0 ? "Inf" : "-Inf");
             }
-        }
+            break;
+        default: break;
+    }
+}
 
-        auto content = line.substr(indent);
-        content = trim(content);
+void ColBuilder::push_null() {
+    switch (type_) {
+        case ColType::UNKNOWN: break;
+        case ColType::LOGICAL:
+        case ColType::INTEGER: ints_.push_back(NA_INTEGER); break;
+        case ColType::DOUBLE: dbls_.push_back(NA_REAL); break;
+        case ColType::STRING: strs_.push_back(StrRef{kNA, 0}); break;
+    }
+    n_++;
+}
 
-        // Skip empty/comment lines
-        if (content.empty()) continue;
-        if (opts_.allow_comments && (content[0] == '#' ||
-            (content.size() >= 2 && content[0] == '/' && content[1] == '/'))) {
-            continue;
-        }
+void ColBuilder::push(std::string_view token, std::string& scratch) {
+    const Scalar s = parse_scalar(token, scratch);
+    if (s.kind == ScalarKind::Null) {
+        push_null();
+        return;
+    }
+    if (forced_ == ColType::STRING) {
+        // A column forced to character keeps the token text as written.
+        push_string(s.kind == ScalarKind::String ? s.str : token);
+        return;
+    }
+    switch (s.kind) {
+        case ScalarKind::Bool:
+            if (type_ == ColType::UNKNOWN) set_type(ColType::LOGICAL);
+            switch (type_) {
+                case ColType::LOGICAL:
+                case ColType::INTEGER: ints_.push_back(s.b ? 1 : 0); n_++; break;
+                case ColType::DOUBLE: dbls_.push_back(s.b ? 1.0 : 0.0); n_++; break;
+                default: push_text_of_number(s); break;
+            }
+            break;
+        case ScalarKind::Int:
+            if (type_ == ColType::UNKNOWN || type_ == ColType::LOGICAL) promote(ColType::INTEGER);
+            switch (type_) {
+                case ColType::INTEGER: ints_.push_back(s.i); n_++; break;
+                case ColType::DOUBLE: dbls_.push_back(static_cast<double>(s.i)); n_++; break;
+                default: push_text_of_number(s); break;
+            }
+            break;
+        case ScalarKind::Double:
+            if (type_ != ColType::STRING) {
+                promote(ColType::DOUBLE);
+                dbls_.push_back(s.d);
+                n_++;
+            } else {
+                push_text_of_number(s);
+            }
+            break;
+        case ScalarKind::String:
+            promote(ColType::STRING);
+            push_string(s.str);
+            break;
+        case ScalarKind::Null:
+            break;
+    }
+}
 
-        // Check for dedent (end of tabular array)
-        if (base_indent >= 0 && static_cast<int>(indent) <= base_indent) {
+SEXP ColBuilder::finalize() const {
+    const R_xlen_t n = static_cast<R_xlen_t>(n_);
+    SEXP out;
+    switch (type_) {
+        case ColType::UNKNOWN: {
+            out = PROTECT(Rf_allocVector(LGLSXP, n));
+            int* p = LOGICAL(out);
+            for (R_xlen_t i = 0; i < n; i++) p[i] = NA_LOGICAL;
             break;
         }
-
-        // Parse row
-        // Strip trailing comment
-        if (opts_.allow_comments) {
-            bool in_string = false;
-            for (size_t i = 0; i < content.size(); i++) {
-                char c = content[i];
-                if (c == '"') in_string = !in_string;
-                if (!in_string && c == '#') {
-                    content = trim(content.substr(0, i));
-                    break;
-                }
+        case ColType::LOGICAL:
+            out = PROTECT(Rf_allocVector(LGLSXP, n));
+            if (n > 0) std::copy(ints_.begin(), ints_.end(), LOGICAL(out));
+            break;
+        case ColType::INTEGER:
+            out = PROTECT(Rf_allocVector(INTSXP, n));
+            if (n > 0) std::copy(ints_.begin(), ints_.end(), INTEGER(out));
+            break;
+        case ColType::DOUBLE:
+            out = PROTECT(Rf_allocVector(REALSXP, n));
+            if (n > 0) std::copy(dbls_.begin(), dbls_.end(), REAL(out));
+            break;
+        case ColType::STRING:
+        default:
+            out = PROTECT(Rf_allocVector(STRSXP, n));
+            for (R_xlen_t i = 0; i < n; i++) {
+                const StrRef& r = strs_[static_cast<size_t>(i)];
+                SET_STRING_ELT(out, i,
+                               r.off == kNA ? NA_STRING
+                                            : mkchar_utf8(std::string_view(pool_.data() + r.off, r.len)));
             }
-        }
-
-        parse_row_line(content, line_no);
+            break;
     }
+    UNPROTECT(1);
+    return out;
 }
 
-SEXP TabularParser::parse_file(const std::string& filepath) {
-    warnings_.clear();
-    current_file_ = filepath;
-    field_names_.clear();
-    columns_.clear();
-    declared_rows_ = 0;
-    observed_rows_ = 0;
-    min_fields_ = SIZE_MAX;
-    max_fields_ = 0;
-    schema_expansions_ = 0;
-
-    BufferedReader reader(filepath);
-    if (reader.has_error()) {
-        throw ParseError(reader.error_message(), 0, 0, "", filepath);
-    }
-
-    std::string header_line;
-    size_t header_line_no;
-
-    if (!find_tabular_array(reader, header_line, header_line_no)) {
-        throw ParseError("No tabular array found", 0, 0, "", filepath);
-    }
-
-    if (!parse_header(header_line)) {
-        throw ParseError("Invalid tabular header", header_line_no, 0, header_line, filepath);
-    }
-
-    parse_rows(reader, -1);
-
-    // Check row count mismatch
-    if (declared_rows_ > 0 && observed_rows_ != declared_rows_) {
-        if (opts_.n_mismatch == "error") {
-            throw ParseError("Declared [" + std::to_string(declared_rows_) + "] but observed " +
-                std::to_string(observed_rows_) + " rows", 0, 0, "", filepath);
-        } else if (opts_.warn) {
-            warnings_.push_back(Warning("n_mismatch",
-                "Declared [" + std::to_string(declared_rows_) + "] but observed " +
-                std::to_string(observed_rows_) + " rows; using observed."));
-        }
-    }
-
-    // Check ragged rows
-    if (min_fields_ != max_fields_ && opts_.warn) {
-        std::string msg = "Tabular rows had inconsistent field counts (min=" +
-            std::to_string(min_fields_) + ", max=" + std::to_string(max_fields_) + ").";
-        if (schema_expansions_ > 0) {
-            msg += " Schema expanded to " + std::to_string(columns_.size()) + " columns;";
-        }
-        msg += " missing values filled with NA.";
-        warnings_.push_back(Warning("ragged_rows", msg));
-    }
-
-    return build_dataframe(columns_, observed_rows_);
-}
-
-SEXP build_dataframe(std::vector<ColBuilder>& columns, size_t nrow) {
-    size_t ncol = columns.size();
-
+SEXP build_dataframe(const std::vector<ColBuilder>& columns, size_t nrow) {
+    const R_xlen_t ncol = static_cast<R_xlen_t>(columns.size());
     SEXP df = PROTECT(Rf_allocVector(VECSXP, ncol));
     SEXP names = PROTECT(Rf_allocVector(STRSXP, ncol));
-
-    for (size_t i = 0; i < ncol; i++) {
-        SET_VECTOR_ELT(df, i, columns[i].finalize());
-        SET_STRING_ELT(names, i, Rf_mkCharCE(columns[i].name().c_str(), CE_UTF8));
+    for (R_xlen_t i = 0; i < ncol; i++) {
+        SET_VECTOR_ELT(df, i, columns[static_cast<size_t>(i)].finalize());
+        SET_STRING_ELT(names, i, mkchar_utf8(columns[static_cast<size_t>(i)].name()));
     }
-
     Rf_setAttrib(df, R_NamesSymbol, names);
 
-    // Set row.names
     SEXP row_names = PROTECT(Rf_allocVector(INTSXP, 2));
     INTEGER(row_names)[0] = NA_INTEGER;
     INTEGER(row_names)[1] = -static_cast<int>(nrow);
     Rf_setAttrib(df, R_RowNamesSymbol, row_names);
-
-    // Set class
-    SEXP class_attr = PROTECT(Rf_allocVector(STRSXP, 1));
-    SET_STRING_ELT(class_attr, 0, Rf_mkChar("data.frame"));
-    Rf_setAttrib(df, R_ClassSymbol, class_attr);
-
-    UNPROTECT(4);
+    Rf_setAttrib(df, R_ClassSymbol, Rf_mkString("data.frame"));
+    UNPROTECT(3);
     return df;
 }
 
-} // namespace toonlite
+// ---------------------------------------------------------------------------
+// TabularReader
+// ---------------------------------------------------------------------------
+
+TabularReader::TabularReader(const std::string& path, const TableReadOptions& opts)
+    : path_(path), opts_(opts), src_(path), lines_(src_, opts.read, path) {
+    if (src_.has_error()) {
+        throw ParseError(src_.error_message(), 0, 0, "", path);
+    }
+    locate();
+    setup_columns();
+}
+
+// Position the reader on the first row of the target table.
+void TabularReader::locate() {
+    const Line* L = lines_.peek();
+    if (!opts_.has_key) {
+        if (!L) {
+            throw ParseError("No tabular array found: the document is empty", 0, 0, "", path_);
+        }
+        if (L->depth != 0) {
+            lines_.fail("The first line of a document must not be indented", L);
+        }
+        if (L->content == "[]") {
+            lines_.consume();
+            empty_table_ = true;
+            return;
+        }
+        const LineScan sc = scan_line(L->content);
+        if (!is_header_line(sc)) {
+            lines_.fail("The document root is not a tabular array; use `key` to select a field", L);
+        }
+        try {
+            parse_header(L->content, sc, lines_.strict(), header_);
+        } catch (const LexError& e) {
+            lines_.fail(e.what(), L);
+        }
+        if (header_.has_key) {
+            lines_.fail("The document root is not a tabular array; use `key` to select a field", L);
+        }
+    } else {
+        bool found = false;
+        bool first = true;
+        while ((L = lines_.peek()) != nullptr) {
+            if (L->depth > 0) {
+                if (first) {
+                    lines_.fail("The first line of a document must not be indented", L);
+                }
+                lines_.consume();  // content of a field we are not reading
+                continue;
+            }
+            first = false;
+            const LineScan sc = scan_line(L->content);
+            std::string key;
+            bool is_header = is_header_line(sc);
+            try {
+                if (is_header) {
+                    parse_header(L->content, sc, lines_.strict(), header_);
+                    if (!header_.has_key) {
+                        lines_.fail("`key` requires the document root to be an object", L);
+                    }
+                    key = header_.key;
+                } else if (sc.colon != npos) {
+                    decode_key(trim_spaces(L->content.substr(0, sc.colon)), key);
+                } else {
+                    lines_.fail("`key` requires the document root to be an object", L);
+                }
+            } catch (const LexError& e) {
+                lines_.fail(e.what(), L);
+            }
+            if (key == opts_.key) {
+                found = true;
+                if (!is_header) {
+                    if (trim_spaces(L->content.substr(sc.colon + 1)) == "[]") {
+                        lines_.consume();
+                        empty_table_ = true;
+                        return;
+                    }
+                    lines_.fail("Field '" + key + "' is not a tabular array", L);
+                }
+                break;
+            }
+            lines_.consume();
+        }
+        if (!found) {
+            throw ParseError("Key not found: " + opts_.key, 0, 0, "", path_);
+        }
+    }
+
+    // L is the header line of the target array.
+    if (header_.keyed) {
+        lines_.fail("The target is a keyed object, not a tabular array", L);
+    }
+    header_.line_no = L->no;
+    if (!header_.has_fields) {
+        // An empty array in legacy form ([0]:) reads as an empty table.
+        if (header_.length == 0 && !header_.length_overflow && header_.inline_values.empty()) {
+            lines_.consume();
+            const Line* next = lines_.peek();
+            if (next && next->depth > 0) {
+                lines_.fail("The target array is not a tabular array", next);
+            }
+            empty_table_ = true;
+            return;
+        }
+        lines_.fail("The target array is not a tabular array", L);
+    }
+    lines_.consume();
+    rows_ = std::make_unique<RowScanner>(lines_, header_, 1, !opts_.ragged_expand);
+}
+
+void TabularReader::setup_columns() {
+    if (empty_table_) return;
+    const std::vector<ResolvedGroup> groups = resolve_fields(header_.fields);
+    cell_col_.assign(header_.fields.leaf_count, -1);
+
+    // Columns in resolved (depth-first) order, named by their dotted path.
+    std::vector<std::pair<std::string, int>> leaves;
+    struct Walk {
+        static void run(const std::vector<ResolvedGroup>& g, int gi, const std::string& prefix,
+                        std::vector<std::pair<std::string, int>>& out) {
+            const ResolvedGroup& rg = g[static_cast<size_t>(gi)];
+            for (size_t k = 0; k < rg.keys.size(); k++) {
+                std::string name = prefix.empty() ? rg.keys[k] : prefix + "." + rg.keys[k];
+                if (rg.group[k] >= 0) {
+                    run(g, rg.group[k], name, out);
+                } else {
+                    out.emplace_back(std::move(name), rg.leaf[k]);
+                }
+            }
+        }
+    };
+    if (!groups.empty()) Walk::run(groups, 0, "", leaves);
+
+    const size_t hint = header_.length_overflow
+                            ? kMaxReserve
+                            : std::min<uint64_t>(header_.length, kMaxReserve);
+    for (auto& leaf : leaves) {
+        ColType forced = ColType::UNKNOWN;
+        for (const auto& ct : opts_.col_types) {
+            if (ct.first == leaf.first) {
+                forced = ct.second;
+                break;
+            }
+        }
+        cell_col_[static_cast<size_t>(leaf.second)] = static_cast<int>(cols_.size());
+        cols_.emplace_back(std::move(leaf.first), forced);
+        cols_.back().reserve(hint);
+    }
+}
+
+void TabularReader::add_extra_column(size_t cell_index) {
+    if (extra_cols_ + 1 > opts_.max_extra_cols) {
+        lines_.fail("max_extra_cols exceeded", rows_->line_no());
+    }
+    extra_cols_++;
+    std::string name = "V" + std::to_string(cell_index + 1);
+    ColType forced = ColType::UNKNOWN;
+    for (const auto& ct : opts_.col_types) {
+        if (ct.first == name) forced = ct.second;
+    }
+    ColBuilder col(std::move(name), forced);
+    for (size_t r = 0; r < batch_rows_; r++) col.push_null();
+    cell_col_.push_back(static_cast<int>(cols_.size()));
+    cols_.push_back(std::move(col));
+}
+
+size_t TabularReader::read(size_t max_rows) {
+    if (empty_table_ || exhausted_) return 0;
+    size_t got = 0;
+    while (max_rows == 0 || got < max_rows) {
+        if (!rows_->next(cells_)) {
+            exhausted_ = true;
+            break;
+        }
+        const size_t nc = cells_.size();
+        if (opts_.ragged_expand) {
+            min_cells_ = std::min(min_cells_, nc);
+            max_cells_ = std::max(max_cells_, nc);
+            while (cell_col_.size() < nc) add_extra_column(cell_col_.size());
+        }
+        try {
+            for (size_t j = 0; j < nc; j++) {
+                const int c = cell_col_[j];
+                if (c >= 0) {
+                    cols_[static_cast<size_t>(c)].push(cells_[j], scratch_);
+                } else {
+                    parse_scalar(cells_[j], scratch_);  // validate dropped duplicates
+                }
+            }
+        } catch (const LexError& e) {
+            lines_.fail(e.what(), rows_->line_no());
+        }
+        if (nc < cell_col_.size()) {
+            for (size_t j = nc; j < cell_col_.size(); j++) {
+                const int c = cell_col_[j];
+                if (c >= 0) cols_[static_cast<size_t>(c)].push_null();
+            }
+        }
+        batch_rows_++;
+        total_rows_++;
+        got++;
+        if ((total_rows_ & 0xFFFF) == 0) check_interrupt();
+    }
+    return got;
+}
+
+SEXP TabularReader::take_batch() {
+    SEXP df = build_dataframe(cols_, batch_rows_);
+    for (auto& c : cols_) c.reset();
+    batch_rows_ = 0;
+    return df;
+}
+
+void TabularReader::finish(std::vector<std::string>& warnings) {
+    if (!empty_table_) {
+        if (!header_.count_matches(total_rows_)) {
+            const std::string msg = count_mismatch_message(header_, total_rows_, "rows");
+            if (lines_.strict() && !opts_.n_mismatch_warn) {
+                lines_.fail(msg, header_.line_no);
+            }
+            if (opts_.warn) warnings.push_back(msg + "; using the rows found.");
+        }
+        if (opts_.ragged_expand && opts_.warn && total_rows_ > 0 && min_cells_ != max_cells_) {
+            std::string msg = "Tabular rows had inconsistent field counts (min=" +
+                              std::to_string(min_cells_) + ", max=" + std::to_string(max_cells_) + ").";
+            if (extra_cols_ > 0) {
+                msg += " Schema expanded to " + std::to_string(cols_.size()) + " columns;";
+            }
+            msg += " missing values filled with NA.";
+            warnings.push_back(msg);
+        }
+    }
+    if (!opts_.has_key) {
+        const Line* L = lines_.peek();
+        if (L) lines_.fail("Unexpected content after the root array", L);
+    }
+}
+
+}  // namespace toonlite
