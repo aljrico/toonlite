@@ -75,3 +75,38 @@ check_col_types <- function(col_types) {
   }
   invisible(col_types)
 }
+
+# `pretty = FALSE` produced invalid TOON (rows glued together); output is
+# always the canonical multi-line form now.
+warn_pretty_deprecated <- function(pretty) {
+  if (!isTRUE(pretty)) {
+    warning(simpleWarning(
+      paste("`pretty` is deprecated and ignored: TOON output is always",
+            "multi-line (`pretty = FALSE` produced invalid TOON)."),
+      sys.call(-1)
+    ))
+  }
+  invisible(NULL)
+}
+
+# The encoders' `strict` used to reject NaN/Inf. The spec maps them to null.
+warn_encoder_strict_deprecated <- function() {
+  warning(simpleWarning(
+    paste("`strict` is deprecated and ignored when writing: NaN and Inf",
+          "are always written as null (TOON spec section 3)."),
+    sys.call(-1)
+  ))
+  invisible(NULL)
+}
+
+# Document delimiter: ",", "\t" or "|" (or the names comma, tab, pipe).
+check_delimiter <- function(delimiter) {
+  choices <- c(comma = ",", tab = "\t", pipe = "|")
+  if (is.character(delimiter) && length(delimiter) == 1 && !is.na(delimiter)) {
+    if (delimiter %in% choices) return(delimiter)
+    if (delimiter %in% names(choices)) return(unname(choices[delimiter]))
+  }
+  stop(simpleError(
+    "`delimiter` must be \",\", \"\\t\" or \"|\" (or \"comma\", \"tab\", \"pipe\")",
+    sys.call(-1)))
+}

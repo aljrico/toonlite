@@ -55,32 +55,6 @@ private:
     std::string scratch_;
 };
 
-// Write buffer for efficient output
-class WriteBuffer {
-public:
-    static constexpr size_t DEFAULT_CAPACITY = 1024 * 1024; // 1MB
-
-    WriteBuffer(size_t initial_capacity = DEFAULT_CAPACITY);
-
-    void append(const char* data, size_t len);
-    void append(const std::string& s);
-    void append(std::string_view sv);
-    void append_char(char c);
-
-    // Append with proper TOON string escaping
-    void append_escaped_string(std::string_view s);
-
-    // Get current content
-    std::string_view view() const;
-    std::string str() const;
-
-    void clear();
-    size_t size() const { return data_.size(); }
-
-private:
-    std::vector<char> data_;
-};
-
 } // namespace toonlite
 
 #endif // TOON_IO_HPP

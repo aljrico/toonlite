@@ -102,36 +102,54 @@ assert_toon <- function(x, is_file = FALSE, strict = TRUE,
 
 #' Format/pretty-print TOON
 #'
+#' Decodes TOON and encodes it again with [to_toon()], which gives the
+#' canonical spec form: normalised quoting and numbers, inline primitive
+#' arrays, tabular forms where they apply.
+#'
 #' @param x Character scalar containing TOON text, or file path if is_file=TRUE.
 #' @param is_file Logical. If TRUE, x is treated as a file path.
-#' @param indent Integer. Number of spaces for indentation (default 2).
-#' @param canonical Logical. If TRUE, use stable representation with
-#'   lexicographic key ordering. Default FALSE (preserve original order).
-#' @param allow_comments Logical. If TRUE (default), allow comments in input.
+#' @param indent Integer. Spaces per indentation level in the output
+#'   (default 2).
+#' @param canonical Logical. If TRUE, sort object keys (byte order, at every
+#'   level) for a stable representation. Default FALSE (preserve order).
+#' @param allow_comments Deprecated and ignored. Full-line `#` comments are
+#'   always skipped (and never written).
+#' @param delimiter Document delimiter for the output: `","` (default),
+#'   `"\t"` or `"|"`.
 #'
 #' @return Character scalar with formatted TOON. If is_file=TRUE, returns
 #'   formatted text (does not rewrite file).
 #'
 #' @examples
-#' # Format with default indent
-#' format_toon('name:"Alice"')
+#' format_toon('name: "Alice"')
 #'
 #' # Format with canonical key ordering
 #' format_toon('b: 1\na: 2', canonical = TRUE)
 #'
 #' @export
 format_toon <- function(x, is_file = FALSE, indent = 2L, canonical = FALSE,
-                        allow_comments = TRUE) {
+                        allow_comments = TRUE, delimiter = ",") {
   check_string(x)
+  warn_comments_deprecated(allow_comments)
+  indent <- check_indent(indent)
+  delimiter <- check_delimiter(delimiter)
 
-  if (is_file) {
-    x <- normalizePath(x, mustWork = TRUE)
+  value <- if (is_file) {
+    read_toon(x, simplify = FALSE)
+  } else {
+    from_toon(x, simplify = FALSE)
   }
+  if (isTRUE(canonical)) value <- sort_keys(value)
 
-  indent <- as.integer(indent)
-  if (indent < 0) indent <- 0L
+  unclass(.Call(C_to_toon, value, indent, delimiter))
+}
 
-  .Call(C_format_toon, x, is_file, indent, canonical, allow_comments)
+# Sort the keys of every object (named list) in byte order.
+sort_keys <- function(x) {
+  if (!is.list(x) || is.data.frame(x)) return(x)
+  if (!is.null(names(x))) x <- x[order(names(x), method = "radix")]
+  x[] <- lapply(x, sort_keys)
+  x
 }
 
 #' Peek at TOON file structure

@@ -143,37 +143,40 @@ toon_stream_items <- function(file, key = NULL, callback, batch_size = 1000L,
 #'   batch has.
 #' @param batch_size Deprecated and ignored (it was never passed to
 #'   `row_source`). Supplying it gives a warning.
-#' @param indent Integer. Number of spaces for indentation (default 2).
+#' @param indent Integer. Spaces per indentation level (default 2).
+#' @param delimiter Document delimiter: `","` (default), `"\t"` or `"|"`.
 #'
 #' @return Invisibly returns the number of rows written.
 #'
 #' @details
 #' Writes a tabular TOON array without holding all rows in memory. Cells are
 #' formatted exactly as [write_toon_df()] formats them, so the file reads back
-#' the same way. Non-finite doubles (`NaN`, `Inf`) are written as `null`, as
-#' with `write_toon_df(strict = FALSE)`.
+#' the same way; batch columns must be atomic vectors. The row count goes in
+#' the header, so rows are first written to a temporary file and `file` is
+#' only written once `row_source()` returns NULL. If `row_source()` fails,
+#' `file` is left untouched. With no rows, `file` holds the empty array `[]`.
 #'
 #' @examples
-#' \dontrun{
-#' # Stream write rows
+#' f <- tempfile(fileext = ".toon")
 #' i <- 0
 #' row_source <- function() {
 #'   i <<- i + 1
 #'   if (i > 3) return(NULL)
 #'   data.frame(x = i, y = i * 2)
 #' }
-#' toon_stream_write_rows("output.toon",
-#'   schema = c("x", "y"),
-#'   row_source = row_source
-#' )
-#' }
+#' toon_stream_write_rows(f, schema = c("x", "y"), row_source = row_source)
+#' readLines(f, warn = FALSE)
 #'
 #' @export
 toon_stream_write_rows <- function(file, schema, row_source,
-                                   batch_size = 10000L, indent = 2L) {
+                                   batch_size = 10000L, indent = 2L,
+                                   delimiter = ",") {
   check_string(file)
-  if (!is.character(schema) || length(schema) == 0) {
+  if (!is.character(schema) || length(schema) == 0 || anyNA(schema)) {
     stop("schema must be a non-empty character vector")
+  }
+  if (anyDuplicated(schema)) {
+    stop("schema must not contain duplicate names")
   }
   if (!is.function(row_source)) {
     stop("row_source must be a function")
@@ -184,29 +187,34 @@ toon_stream_write_rows <- function(file, schema, row_source,
             "how many rows each batch has.")
   }
 
-  indent <- as.integer(indent)
-  if (indent < 0) indent <- 0L
+  indent <- check_indent(indent)
+  delimiter <- check_delimiter(delimiter)
 
-  # Initialize writer
-  writer_ptr <- .Call(C_stream_write_init, file, schema, indent)
+  tmp <- tempfile("toonlite-rows-")
+  writer_ptr <- .Call(C_stream_write_init, file, tmp, schema, indent, delimiter)
+  committed <- FALSE
+  on.exit(if (!committed) .Call(C_stream_write_close, writer_ptr, FALSE))
 
-  total_rows <- 0L
-
-  tryCatch({
-    repeat {
-      batch <- row_source()
-      if (is.null(batch)) break
-      if (!is.data.frame(batch)) {
-        stop("row_source must return a data.frame or NULL")
-      }
-      if (nrow(batch) == 0) next
-
-      .Call(C_stream_write_batch, writer_ptr, batch)
-      total_rows <- total_rows + nrow(batch)
+  repeat {
+    batch <- row_source()
+    if (is.null(batch)) break
+    if (!is.data.frame(batch)) {
+      stop("row_source must return a data.frame or NULL")
     }
-  }, finally = {
-    .Call(C_stream_write_close, writer_ptr)
-  })
+    if (nrow(batch) == 0) next
+    if (!identical(names(batch), schema)) {
+      missing_cols <- setdiff(schema, names(batch))
+      if (length(missing_cols) > 0) {
+        stop("Batch is missing schema columns: ",
+             paste(missing_cols, collapse = ", "))
+      }
+      batch <- batch[schema]
+    }
 
+    .Call(C_stream_write_batch, writer_ptr, batch)
+  }
+
+  committed <- TRUE
+  total_rows <- .Call(C_stream_write_close, writer_ptr, TRUE)
   invisible(total_rows)
 }

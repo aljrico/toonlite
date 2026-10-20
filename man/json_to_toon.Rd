@@ -4,17 +4,25 @@
 \alias{json_to_toon}
 \title{Convert JSON to TOON}
 \usage{
-json_to_toon(json, pretty = TRUE, strict = TRUE, allow_comments = TRUE)
+json_to_toon(
+  json,
+  pretty = TRUE,
+  strict = TRUE,
+  allow_comments = TRUE,
+  delimiter = ","
+)
 }
 \arguments{
 \item{json}{Character scalar containing JSON.}
 
-\item{pretty}{Logical. If TRUE (default), use multi-line formatting.}
+\item{pretty}{Deprecated and ignored (see \code{\link[=to_toon]{to_toon()}}).}
 
-\item{strict}{Logical. If TRUE (default), enforce strict syntax.}
+\item{strict}{Deprecated and ignored (see \code{\link[=to_toon]{to_toon()}}).}
 
 \item{allow_comments}{Logical. Currently has no effect: JSON input cannot
 contain comments and the encoder never writes them.}
+
+\item{delimiter}{Document delimiter: \code{","} (default), \code{"\\t"} or \code{"|"}.}
 }
 \value{
 Character scalar with class "toon".

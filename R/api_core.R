@@ -82,71 +82,93 @@ read_toon <- function(file, strict = TRUE, simplify = TRUE,
 
 #' Serialize R object to TOON
 #'
-#' @param x R object to serialize.
-#' @param pretty Logical. If TRUE (default), use multi-line formatting.
-#' @param indent Integer. Number of spaces for indentation (default 2).
-#' @param strict Logical. If TRUE (default), reject NaN/Inf values.
-#' @param allow_comments Logical. For future use (writers generally should not
-#'   emit comments).
+#' Encodes an R value as a TOON document following spec v4.4: canonical
+#' numbers, minimal quoting, inline primitive arrays, tabular arrays for
+#' uniform objects (with nested field groups) and keyed tables for objects of
+#' uniform objects. The output has no trailing newline.
 #'
-#' @return Character scalar with class "toon" containing the TOON representation.
+#' @param x R object to serialize.
+#' @param pretty Deprecated and ignored: output is always multi-line.
+#'   `pretty = FALSE` used to produce invalid TOON; passing anything other than
+#'   TRUE warns.
+#' @param indent Integer. Spaces per indentation level (the spec's
+#'   `indentSize`, default 2).
+#' @param strict Deprecated and ignored: NaN and Inf are always written as
+#'   `null`, as the spec requires. Supplying it warns.
+#' @param allow_comments Deprecated and ignored: encoders never emit comments.
+#'   Passing TRUE warns.
+#' @param delimiter Document delimiter for inline arrays and tabular rows:
+#'   `","` (default), `"\t"` or `"|"`; `"comma"`, `"tab"` and `"pipe"` also
+#'   work.
+#'
+#' @return Character scalar with class "toon" containing the TOON document.
 #'
 #' @details
-#' Type conversions:
+#' R values map to the JSON data model as follows:
 #' \itemize{
-#'   \item factor -> character
-#'   \item Date -> ISO 8601 string (YYYY-MM-DD)
-#'   \item POSIXct -> ISO 8601 string (YYYY-MM-DDTHH:MM:SSZ)
-#'   \item NA values -> null
+#'   \item `NULL`, `NA`, `NaN`, `Inf` -> `null`
+#'   \item a length-1 atomic vector -> a primitive; wrap it in [I()] to write
+#'     a one-element array
+#'   \item other atomic vectors -> arrays (names are dropped)
+#'   \item a list with names -> an object (names must be unique); a list
+#'     without names -> an array
+#'   \item a data.frame -> an array of row objects, written in tabular form
+#'     when every column is atomic (data.frame columns become nested field
+#'     groups)
+#'   \item factor -> its level; Date -> `"YYYY-MM-DD"`; POSIXct ->
+#'     `"YYYY-MM-DDTHH:MM:SSZ"` in UTC (whole seconds);
+#'     `bit64::integer64` -> integer
+#'   \item doubles use the shortest text that reads back to the same value
+#'     (`1` not `1.0`, `0.1`, `1e-7`)
+#'   \item other types (functions, environments, raw, complex) -> `null`
 #' }
 #'
 #' @examples
-#' # Serialize simple list
-#' to_toon(list(name = "Alice", age = 30))
+#' to_toon(list(name = "Alice", age = 30, tags = c("a", "b")))
 #'
-#' # Serialize vector
-#' to_toon(c(1, 2, 3))
+#' to_toon(data.frame(id = 1:2, name = c("Ada", "Bob")))
 #'
-#' # Compact format
-#' to_toon(list(x = 1, y = 2), pretty = FALSE)
+#' to_toon(list(x = I(1)), delimiter = "|")
 #'
 #' @export
 to_toon <- function(x, pretty = TRUE, indent = 2L, strict = TRUE,
-                    allow_comments = FALSE) {
-  indent <- as.integer(indent)
-  if (indent < 0) indent <- 0L
-
-  # allow_comments is reserved for future use; warn if non-default value passed
-
-  if (allow_comments) {
-    warning("allow_comments is reserved for future use and currently has no effect")
+                    allow_comments = FALSE, delimiter = ",") {
+  warn_pretty_deprecated(pretty)
+  if (!missing(strict)) warn_encoder_strict_deprecated()
+  if (!isFALSE(allow_comments)) {
+    warning("`allow_comments` is deprecated and ignored: encoders never emit comments.")
   }
+  indent <- check_indent(indent)
+  delimiter <- check_delimiter(delimiter)
 
-  .Call(C_to_toon, x, pretty, indent, strict)
+  .Call(C_to_toon, x, indent, delimiter)
 }
 
 #' Write R object to TOON file
 #'
-#' @param x R object to serialize.
+#' Encodes `x` exactly like [to_toon()] and writes it to `file` (UTF-8, no
+#' trailing newline) without building the whole text in memory.
+#'
+#' @inheritParams to_toon
 #' @param file Character scalar. Path to output file.
-#' @param pretty Logical. If TRUE (default), use multi-line formatting.
-#' @param indent Integer. Number of spaces for indentation (default 2).
-#' @param strict Logical. If TRUE (default), reject NaN/Inf values.
 #'
 #' @return Invisibly returns NULL.
 #'
 #' @examples
-#' \dontrun{
-#' write_toon(list(x = 1, y = 2), "output.toon")
-#' }
+#' f <- tempfile(fileext = ".toon")
+#' write_toon(list(x = 1, y = 2), f)
+#' readLines(f, warn = FALSE)
 #'
 #' @export
-write_toon <- function(x, file, pretty = TRUE, indent = 2L, strict = TRUE) {
+write_toon <- function(x, file, pretty = TRUE, indent = 2L, strict = TRUE,
+                       delimiter = ",") {
   check_string(file)
+  warn_pretty_deprecated(pretty)
+  if (!missing(strict)) warn_encoder_strict_deprecated()
+  indent <- check_indent(indent)
+  delimiter <- check_delimiter(delimiter)
 
-  toon_str <- to_toon(x, pretty = pretty, indent = indent, strict = strict)
-
-  writeLines(toon_str, file, useBytes = TRUE)
+  .Call(C_write_toon, x, file, indent, delimiter)
   invisible(NULL)
 }
 

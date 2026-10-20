@@ -80,36 +80,37 @@ read_toon_df <- function(file, key = NULL, strict = TRUE, allow_comments = TRUE,
 
 #' Write data.frame to tabular TOON
 #'
+#' Writes `df` as a root tabular array (`[N]{fields}:` and one row per line),
+#' exactly as [write_toon()] writes a data.frame. A data.frame with no rows is
+#' written as the empty array `[]`.
+#'
+#' @inheritParams write_toon
 #' @param df A data.frame to write.
-#' @param file Character scalar. Path to output file.
 #' @param tabular Deprecated and ignored. Data frames are always written as a
 #'   tabular TOON array; passing anything other than TRUE gives a warning.
-#' @param pretty Logical. If TRUE (default), use multi-line formatting.
-#' @param indent Integer. Number of spaces for indentation (default 2).
-#' @param strict Logical. If TRUE (default), reject NaN/Inf values.
 #'
 #' @return Invisibly returns NULL.
 #'
 #' @examples
-#' \dontrun{
-#' # Write data.frame as tabular TOON
-#' write_toon_df(mtcars[1:3, 1:4], "cars.toon")
-#' }
+#' f <- tempfile(fileext = ".toon")
+#' write_toon_df(head(mtcars[, 1:4], 3), f)
+#' readLines(f, warn = FALSE)
 #'
 #' @export
 write_toon_df <- function(df, file, tabular = TRUE, pretty = TRUE,
-                          indent = 2L, strict = TRUE) {
+                          indent = 2L, strict = TRUE, delimiter = ",") {
   if (!is.data.frame(df)) {
     stop("df must be a data.frame")
   }
   check_string(file)
 
   warn_tabular_deprecated(tabular)
+  warn_pretty_deprecated(pretty)
+  if (!missing(strict)) warn_encoder_strict_deprecated()
+  indent <- check_indent(indent)
+  delimiter <- check_delimiter(delimiter)
 
-  indent <- as.integer(indent)
-  if (indent < 0) indent <- 0L
-
-  .Call(C_write_toon_df, df, file, pretty, indent, strict)
+  .Call(C_write_toon, df, file, indent, delimiter)
 
   invisible(NULL)
 }

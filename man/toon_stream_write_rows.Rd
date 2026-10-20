@@ -9,7 +9,8 @@ toon_stream_write_rows(
   schema,
   row_source,
   batch_size = 10000L,
-  indent = 2L
+  indent = 2L,
+  delimiter = ","
 )
 }
 \arguments{
@@ -24,7 +25,9 @@ batch has.}
 \item{batch_size}{Deprecated and ignored (it was never passed to
 \code{row_source}). Supplying it gives a warning.}
 
-\item{indent}{Integer. Number of spaces for indentation (default 2).}
+\item{indent}{Integer. Spaces per indentation level (default 2).}
+
+\item{delimiter}{Document delimiter: \code{","} (default), \code{"\\t"} or \code{"|"}.}
 }
 \value{
 Invisibly returns the number of rows written.
@@ -35,22 +38,20 @@ Stream write tabular rows
 \details{
 Writes a tabular TOON array without holding all rows in memory. Cells are
 formatted exactly as \code{\link[=write_toon_df]{write_toon_df()}} formats them, so the file reads back
-the same way. Non-finite doubles (\code{NaN}, \code{Inf}) are written as \code{null}, as
-with \code{write_toon_df(strict = FALSE)}.
+the same way; batch columns must be atomic vectors. The row count goes in
+the header, so rows are first written to a temporary file and \code{file} is
+only written once \code{row_source()} returns NULL. If \code{row_source()} fails,
+\code{file} is left untouched. With no rows, \code{file} holds the empty array \verb{[]}.
 }
 \examples{
-\dontrun{
-# Stream write rows
+f <- tempfile(fileext = ".toon")
 i <- 0
 row_source <- function() {
   i <<- i + 1
   if (i > 3) return(NULL)
   data.frame(x = i, y = i * 2)
 }
-toon_stream_write_rows("output.toon",
-  schema = c("x", "y"),
-  row_source = row_source
-)
-}
+toon_stream_write_rows(f, schema = c("x", "y"), row_source = row_source)
+readLines(f, warn = FALSE)
 
 }

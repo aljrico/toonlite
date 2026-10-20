@@ -9,7 +9,8 @@ csv_to_toon(
   path_toon,
   tabular = TRUE,
   strict = TRUE,
-  col_types = NULL
+  col_types = NULL,
+  delimiter = ","
 )
 }
 \arguments{
@@ -20,9 +21,11 @@ csv_to_toon(
 \item{tabular}{Deprecated and ignored. Data frames are always written as a
 tabular TOON array; passing anything other than TRUE gives a warning.}
 
-\item{strict}{Logical. If TRUE (default), enforce strict syntax on output.}
+\item{strict}{Deprecated and ignored (see \code{\link[=to_toon]{to_toon()}}).}
 
 \item{col_types}{Named character vector specifying column types.}
+
+\item{delimiter}{Document delimiter: \code{","} (default), \code{"\\t"} or \code{"|"}.}
 }
 \value{
 Invisibly returns NULL.

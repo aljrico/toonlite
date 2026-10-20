@@ -10,7 +10,8 @@ write_toon_df(
   tabular = TRUE,
   pretty = TRUE,
   indent = 2L,
-  strict = TRUE
+  strict = TRUE,
+  delimiter = ","
 )
 }
 \arguments{
@@ -21,22 +22,31 @@ write_toon_df(
 \item{tabular}{Deprecated and ignored. Data frames are always written as a
 tabular TOON array; passing anything other than TRUE gives a warning.}
 
-\item{pretty}{Logical. If TRUE (default), use multi-line formatting.}
+\item{pretty}{Deprecated and ignored: output is always multi-line.
+\code{pretty = FALSE} used to produce invalid TOON; passing anything other than
+TRUE warns.}
 
-\item{indent}{Integer. Number of spaces for indentation (default 2).}
+\item{indent}{Integer. Spaces per indentation level (the spec's
+\code{indentSize}, default 2).}
 
-\item{strict}{Logical. If TRUE (default), reject NaN/Inf values.}
+\item{strict}{Deprecated and ignored: NaN and Inf are always written as
+\code{null}, as the spec requires. Supplying it warns.}
+
+\item{delimiter}{Document delimiter for inline arrays and tabular rows:
+\code{","} (default), \code{"\\t"} or \code{"|"}; \code{"comma"}, \code{"tab"} and \code{"pipe"} also
+work.}
 }
 \value{
 Invisibly returns NULL.
 }
 \description{
-Write data.frame to tabular TOON
+Writes \code{df} as a root tabular array (\verb{[N]\{fields\}:} and one row per line),
+exactly as \code{\link[=write_toon]{write_toon()}} writes a data.frame. A data.frame with no rows is
+written as the empty array \verb{[]}.
 }
 \examples{
-\dontrun{
-# Write data.frame as tabular TOON
-write_toon_df(mtcars[1:3, 1:4], "cars.toon")
-}
+f <- tempfile(fileext = ".toon")
+write_toon_df(head(mtcars[, 1:4], 3), f)
+readLines(f, warn = FALSE)
 
 }

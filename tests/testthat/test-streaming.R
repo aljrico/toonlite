@@ -88,7 +88,7 @@ test_that("toon_stream_write_rows output reads back like write_toon_df", {
   f_stream <- tempfile(fileext = ".toon")
   on.exit(unlink(c(f_df, f_stream)))
 
-  write_toon_df(df, f_df, strict = FALSE)
+  write_toon_df(df, f_df)
 
   chunks <- list(df[1:3, ], df[4:8, ])
   k <- 0L
@@ -97,7 +97,8 @@ test_that("toon_stream_write_rows output reads back like write_toon_df", {
     if (k <= length(chunks)) chunks[[k]] else NULL
   })
 
-  expect_identical(readLines(f_stream), readLines(f_df))
+  read_text <- function(f) readChar(f, file.size(f), useBytes = TRUE)
+  expect_identical(read_text(f_stream), read_text(f_df))
   expect_identical(read_toon_df(f_stream), read_toon_df(f_df))
 })
 
@@ -114,7 +115,8 @@ test_that("toon_stream_write_rows escapes control chars, writes factor levels, n
     batch
   })
 
-  expect_identical(readLines(tmp)[2], '  "a\\u0001b", "lvl", null')
+  expect_identical(readLines(tmp, warn = FALSE),
+                   c("[1]{s,f,d}:", '  "a\\u0001b",lvl,null'))
   result <- read_toon_df(tmp)
   expect_identical(result$s, "a\001b")
   expect_identical(result$f, "lvl")
@@ -186,4 +188,38 @@ test_that("toon_stream_rows streams in batches with the same typing as read_toon
   })
   expect_identical(sizes, c(2L, 2L, 1L))
   expect_identical(do.call(rbind, acc), read_toon_df(tmp, key = "data"))
+})
+
+test_that("toon_stream_write_rows writes [] for no rows and leaves the file alone on error", {
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  n <- toon_stream_write_rows(tmp, "x", function() NULL)
+  expect_identical(n, 0)
+  expect_identical(readLines(tmp, warn = FALSE), "[]")
+
+  writeLines("keep me", tmp)
+  calls <- 0L
+  expect_error(
+    toon_stream_write_rows(tmp, "x", function() {
+      calls <<- calls + 1L
+      if (calls > 1L) stop("source failed")
+      data.frame(x = 1:2)
+    }),
+    "source failed"
+  )
+  expect_identical(readLines(tmp), "keep me")
+})
+
+test_that("toon_stream_write_rows reorders columns by schema and supports delimiters", {
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  done <- FALSE
+  toon_stream_write_rows(tmp, c("a", "b c"), delimiter = "|", function() {
+    if (done) return(NULL)
+    done <<- TRUE
+    data.frame(`b c` = c("x|y", "z"), a = 1:2, check.names = FALSE)
+  })
+  expect_identical(readLines(tmp, warn = FALSE),
+                   c('[2|]{a|"b c"}:', '  1|"x|y"', "  2|z"))
+  expect_identical(read_toon_df(tmp)[["b c"]], c("x|y", "z"))
 })

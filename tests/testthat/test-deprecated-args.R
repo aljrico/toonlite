@@ -9,7 +9,7 @@ test_that("tabular = FALSE warns and is ignored", {
   expect_silent(write_toon_df(df, f_default))
   expect_warning(write_toon_df(df, f_flag, tabular = FALSE),
                  "`tabular` is deprecated and ignored")
-  expect_identical(readLines(f_flag), readLines(f_default))
+  expect_identical(readLines(f_flag, warn = FALSE), readLines(f_default, warn = FALSE))
 })
 
 test_that("csv_to_toon(tabular = FALSE) warns once", {

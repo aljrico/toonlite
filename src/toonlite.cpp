@@ -2,7 +2,9 @@
 // turns C++ exceptions and R jumps from callbacks into R conditions only
 // after all C++ frames are gone, and emits collected warnings on success.
 
+#include <climits>
 #include <cmath>
+#include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <fstream>
@@ -17,7 +19,6 @@
 #include "toon_errors.h"
 #include "toon_parser.h"
 #include "toon_r.h"
-#include "toon_stream.h"
 
 using namespace toonlite;
 
@@ -92,6 +93,50 @@ ReadOptions read_options(SEXP strict, SEXP indent) {
     o.indent = n;
     return o;
 }
+
+WriteOptions write_options(SEXP indent, SEXP delimiter) {
+    WriteOptions o;
+    const int n = Rf_asInteger(indent);
+    if (n == NA_INTEGER || n < 1) {
+        throw std::invalid_argument("`indent` must be a positive integer");
+    }
+    o.indent = n;
+    const char* d = CHAR(STRING_ELT(delimiter, 0));
+    if (std::strcmp(d, ",") != 0 && std::strcmp(d, "\t") != 0 && std::strcmp(d, "|") != 0) {
+        throw std::invalid_argument("`delimiter` must be \",\", \"\\t\" or \"|\"");
+    }
+    o.delim = d[0];
+    return o;
+}
+
+// An output file that is removed again unless commit() succeeds.
+class OutputFile {
+public:
+    explicit OutputFile(std::string path) : path_(std::move(path)) {
+        f_ = std::fopen(path_.c_str(), "wb");
+        if (!f_) throw std::runtime_error("Cannot open file for writing: " + path_);
+    }
+    ~OutputFile() {
+        if (f_) {
+            std::fclose(f_);
+            std::remove(path_.c_str());
+        }
+    }
+    std::FILE* get() const { return f_; }
+    const std::string& path() const { return path_; }
+    void commit() {
+        std::FILE* f = f_;
+        f_ = nullptr;
+        if (std::fclose(f) != 0) {
+            std::remove(path_.c_str());
+            throw std::runtime_error("Error writing to file: " + path_);
+        }
+    }
+
+private:
+    std::string path_;
+    std::FILE* f_ = nullptr;
+};
 
 std::vector<std::pair<std::string, ColType>> parse_col_types(SEXP col_types) {
     std::vector<std::pair<std::string, ColType>> out;
@@ -372,14 +417,26 @@ SEXP C_read_toon(SEXP file, SEXP strict, SEXP simplify, SEXP allow_comments,
     });
 }
 
-SEXP C_to_toon(SEXP x, SEXP pretty, SEXP indent, SEXP strict) {
+SEXP C_to_toon(SEXP x, SEXP indent, SEXP delimiter) {
     return guarded("Error encoding to TOON", [&](Warnings&) {
-        EncodeOptions opts;
-        opts.pretty = flag_arg(pretty);
-        opts.indent = Rf_asInteger(indent);
-        opts.strict = flag_arg(strict);
-        Encoder encoder(opts);
-        return toon_string(encoder.encode(x), true);
+        Out out;
+        Encoder(out, write_options(indent, delimiter)).document(x);
+        if (out.text().size() > static_cast<size_t>(INT_MAX)) {
+            throw std::runtime_error("The TOON text is larger than an R string can hold (2^31 - 1 bytes); use write_toon()");
+        }
+        return toon_string(out.text(), true);
+    });
+}
+
+SEXP C_write_toon(SEXP x, SEXP file, SEXP indent, SEXP delimiter) {
+    return guarded("Error writing TOON", [&](Warnings&) {
+        const WriteOptions opts = write_options(indent, delimiter);
+        OutputFile f(path_arg(file));
+        Out out(f.get(), f.path());
+        Encoder(out, opts).document(x);
+        out.flush();
+        f.commit();
+        return R_NilValue;
     });
 }
 
@@ -423,24 +480,6 @@ SEXP C_read_toon_df(SEXP file, SEXP key, SEXP strict, SEXP indent, SEXP warn,
     });
 }
 
-SEXP C_write_toon_df(SEXP df, SEXP file, SEXP pretty, SEXP indent, SEXP strict) {
-    return guarded("Error writing tabular TOON", [&](Warnings&) {
-        EncodeOptions opts;
-        opts.pretty = flag_arg(pretty);
-        opts.indent = Rf_asInteger(indent);
-        opts.strict = flag_arg(strict);
-        Encoder encoder(opts);
-        const std::string result = encoder.encode_dataframe(df);
-        const std::string path = path_arg(file);
-        std::ofstream out(path, std::ios::binary);
-        if (!out.is_open()) {
-            throw std::runtime_error("Cannot open file for writing: " + path);
-        }
-        out << result;
-        return R_NilValue;
-    });
-}
-
 // Stream tabular rows to an R callback in batches
 SEXP C_stream_rows(SEXP file, SEXP key, SEXP callback, SEXP batch_size,
                    SEXP strict, SEXP indent, SEXP warn, SEXP col_types,
@@ -458,27 +497,6 @@ SEXP C_stream_rows(SEXP file, SEXP key, SEXP callback, SEXP batch_size,
         }
         reader.finish(w);
         return R_NilValue;
-    });
-}
-
-SEXP C_format_toon(SEXP x, SEXP is_file, SEXP indent, SEXP canonical, SEXP allow_comments) {
-    return guarded("Error formatting TOON", [&](Warnings&) {
-        ParseOptions parse_opts;
-        parse_opts.allow_comments = flag_arg(allow_comments);
-        parse_opts.simplify = false;
-        Parser parser(parse_opts);
-        NodePtr node = flag_arg(is_file)
-                           ? parser.parse_file(path_arg(x))
-                           : parser.parse_string(Rf_translateCharUTF8(STRING_ELT(x, 0)));
-        EncodeOptions enc_opts;
-        enc_opts.pretty = true;
-        enc_opts.indent = Rf_asInteger(indent);
-        enc_opts.canonical = flag_arg(canonical);
-        Encoder encoder(enc_opts);
-        SEXP r_node = PROTECT(node_to_sexp(node, false));
-        SEXP out = toon_string(encoder.encode(r_node), false);
-        UNPROTECT(1);
-        return out;
     });
 }
 
@@ -575,14 +593,16 @@ SEXP C_toon_info(SEXP file, SEXP allow_comments) {
     });
 }
 
-SEXP C_stream_write_init(SEXP file, SEXP schema, SEXP indent) {
+SEXP C_stream_write_init(SEXP file, SEXP tmp_file, SEXP schema, SEXP indent, SEXP delimiter) {
     return guarded("Error initializing stream writer", [&](Warnings&) {
         std::vector<std::string> fields;
         for (R_xlen_t i = 0; i < Rf_xlength(schema); i++) {
-            fields.emplace_back(Rf_translateCharUTF8(STRING_ELT(schema, i)));
+            fields.emplace_back(char_utf8(STRING_ELT(schema, i)));
         }
-        auto writer = std::make_unique<StreamWriter>(path_arg(file), fields, Rf_asInteger(indent));
-        SEXP ptr = PROTECT(R_MakeExternalPtr(writer.release(), R_NilValue, R_NilValue));
+        auto writer = std::make_unique<StreamWriter>(path_arg(file), path_arg(tmp_file),
+                                                     std::move(fields), write_options(indent, delimiter));
+        SEXP ptr = PROTECT(R_MakeExternalPtr(writer.get(), R_NilValue, R_NilValue));
+        writer.release();
         R_RegisterCFinalizerEx(ptr, finalize_stream_writer, TRUE);
         UNPROTECT(1);
         return ptr;
@@ -596,15 +616,15 @@ SEXP C_stream_write_batch(SEXP ptr, SEXP df_batch) {
     });
 }
 
-SEXP C_stream_write_close(SEXP ptr) {
+// Returns the number of rows written.
+SEXP C_stream_write_close(SEXP ptr, SEXP commit) {
     return guarded("Error closing stream writer", [&](Warnings&) {
         auto* w = static_cast<StreamWriter*>(R_ExternalPtrAddr(ptr));
-        if (w) {
-            R_ClearExternalPtr(ptr);
-            std::unique_ptr<StreamWriter> owned(w);
-            owned->close();
-        }
-        return R_NilValue;
+        if (!w) return Rf_ScalarReal(0);
+        R_ClearExternalPtr(ptr);
+        std::unique_ptr<StreamWriter> owned(w);
+        owned->close(flag_arg(commit));
+        return Rf_ScalarReal(static_cast<double>(owned->rows()));
     });
 }
 

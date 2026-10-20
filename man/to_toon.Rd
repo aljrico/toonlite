@@ -4,43 +4,69 @@
 \alias{to_toon}
 \title{Serialize R object to TOON}
 \usage{
-to_toon(x, pretty = TRUE, indent = 2L, strict = TRUE, allow_comments = FALSE)
+to_toon(
+  x,
+  pretty = TRUE,
+  indent = 2L,
+  strict = TRUE,
+  allow_comments = FALSE,
+  delimiter = ","
+)
 }
 \arguments{
 \item{x}{R object to serialize.}
 
-\item{pretty}{Logical. If TRUE (default), use multi-line formatting.}
+\item{pretty}{Deprecated and ignored: output is always multi-line.
+\code{pretty = FALSE} used to produce invalid TOON; passing anything other than
+TRUE warns.}
 
-\item{indent}{Integer. Number of spaces for indentation (default 2).}
+\item{indent}{Integer. Spaces per indentation level (the spec's
+\code{indentSize}, default 2).}
 
-\item{strict}{Logical. If TRUE (default), reject NaN/Inf values.}
+\item{strict}{Deprecated and ignored: NaN and Inf are always written as
+\code{null}, as the spec requires. Supplying it warns.}
 
-\item{allow_comments}{Logical. For future use (writers generally should not
-emit comments).}
+\item{allow_comments}{Deprecated and ignored: encoders never emit comments.
+Passing TRUE warns.}
+
+\item{delimiter}{Document delimiter for inline arrays and tabular rows:
+\code{","} (default), \code{"\\t"} or \code{"|"}; \code{"comma"}, \code{"tab"} and \code{"pipe"} also
+work.}
 }
 \value{
-Character scalar with class "toon" containing the TOON representation.
+Character scalar with class "toon" containing the TOON document.
 }
 \description{
-Serialize R object to TOON
+Encodes an R value as a TOON document following spec v4.4: canonical
+numbers, minimal quoting, inline primitive arrays, tabular arrays for
+uniform objects (with nested field groups) and keyed tables for objects of
+uniform objects. The output has no trailing newline.
 }
 \details{
-Type conversions:
+R values map to the JSON data model as follows:
 \itemize{
-\item factor -> character
-\item Date -> ISO 8601 string (YYYY-MM-DD)
-\item POSIXct -> ISO 8601 string (YYYY-MM-DDTHH:MM:SSZ)
-\item NA values -> null
+\item \code{NULL}, \code{NA}, \code{NaN}, \code{Inf} -> \code{null}
+\item a length-1 atomic vector -> a primitive; wrap it in \code{\link[=I]{I()}} to write
+a one-element array
+\item other atomic vectors -> arrays (names are dropped)
+\item a list with names -> an object (names must be unique); a list
+without names -> an array
+\item a data.frame -> an array of row objects, written in tabular form
+when every column is atomic (data.frame columns become nested field
+groups)
+\item factor -> its level; Date -> \code{"YYYY-MM-DD"}; POSIXct ->
+\code{"YYYY-MM-DDTHH:MM:SSZ"} in UTC (whole seconds);
+\code{bit64::integer64} -> integer
+\item doubles use the shortest text that reads back to the same value
+(\code{1} not \code{1.0}, \code{0.1}, \code{1e-7})
+\item other types (functions, environments, raw, complex) -> \code{null}
 }
 }
 \examples{
-# Serialize simple list
-to_toon(list(name = "Alice", age = 30))
+to_toon(list(name = "Alice", age = 30, tags = c("a", "b")))
 
-# Serialize vector
-to_toon(c(1, 2, 3))
+to_toon(data.frame(id = 1:2, name = c("Ada", "Bob")))
 
-# Compact format
-to_toon(list(x = 1, y = 2), pretty = FALSE)
+to_toon(list(x = I(1)), delimiter = "|")
 
 }

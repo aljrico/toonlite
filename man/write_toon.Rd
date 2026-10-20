@@ -4,28 +4,37 @@
 \alias{write_toon}
 \title{Write R object to TOON file}
 \usage{
-write_toon(x, file, pretty = TRUE, indent = 2L, strict = TRUE)
+write_toon(x, file, pretty = TRUE, indent = 2L, strict = TRUE, delimiter = ",")
 }
 \arguments{
 \item{x}{R object to serialize.}
 
 \item{file}{Character scalar. Path to output file.}
 
-\item{pretty}{Logical. If TRUE (default), use multi-line formatting.}
+\item{pretty}{Deprecated and ignored: output is always multi-line.
+\code{pretty = FALSE} used to produce invalid TOON; passing anything other than
+TRUE warns.}
 
-\item{indent}{Integer. Number of spaces for indentation (default 2).}
+\item{indent}{Integer. Spaces per indentation level (the spec's
+\code{indentSize}, default 2).}
 
-\item{strict}{Logical. If TRUE (default), reject NaN/Inf values.}
+\item{strict}{Deprecated and ignored: NaN and Inf are always written as
+\code{null}, as the spec requires. Supplying it warns.}
+
+\item{delimiter}{Document delimiter for inline arrays and tabular rows:
+\code{","} (default), \code{"\\t"} or \code{"|"}; \code{"comma"}, \code{"tab"} and \code{"pipe"} also
+work.}
 }
 \value{
 Invisibly returns NULL.
 }
 \description{
-Write R object to TOON file
+Encodes \code{x} exactly like \code{\link[=to_toon]{to_toon()}} and writes it to \code{file} (UTF-8, no
+trailing newline) without building the whole text in memory.
 }
 \examples{
-\dontrun{
-write_toon(list(x = 1, y = 2), "output.toon")
-}
+f <- tempfile(fileext = ".toon")
+write_toon(list(x = 1, y = 2), f)
+readLines(f, warn = FALSE)
 
 }

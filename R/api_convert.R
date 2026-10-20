@@ -8,10 +8,11 @@ NULL
 #' Convert JSON to TOON
 #'
 #' @param json Character scalar containing JSON.
-#' @param pretty Logical. If TRUE (default), use multi-line formatting.
-#' @param strict Logical. If TRUE (default), enforce strict syntax.
+#' @param pretty Deprecated and ignored (see [to_toon()]).
+#' @param strict Deprecated and ignored (see [to_toon()]).
 #' @param allow_comments Logical. Currently has no effect: JSON input cannot
 #'   contain comments and the encoder never writes them.
+#' @param delimiter Document delimiter: `","` (default), `"\t"` or `"|"`.
 #'
 #' @return Character scalar with class "toon".
 #'
@@ -25,7 +26,7 @@ NULL
 #'
 #' @export
 json_to_toon <- function(json, pretty = TRUE, strict = TRUE,
-                         allow_comments = TRUE) {
+                         allow_comments = TRUE, delimiter = ",") {
   if (!requireNamespace("jsonlite", quietly = TRUE)) {
     stop("Install jsonlite to use JSON conversion: install.packages('jsonlite')")
   }
@@ -35,9 +36,10 @@ json_to_toon <- function(json, pretty = TRUE, strict = TRUE,
   # Parse JSON to R object
   obj <- jsonlite::fromJSON(json, simplifyVector = FALSE)
 
-  # Convert to TOON (allow_comments is not forwarded: to_toon() would warn
-  # that it has no effect)
-  to_toon(obj, pretty = pretty, strict = strict)
+  warn_pretty_deprecated(pretty)
+  if (!missing(strict)) warn_encoder_strict_deprecated()
+
+  to_toon(obj, delimiter = delimiter)
 }
 
 #' Convert TOON to JSON
@@ -115,7 +117,8 @@ toon_to_csv <- function(path_toon, path_csv, key = NULL, strict = TRUE,
 #' @param path_toon Character scalar. Path to output TOON file.
 #' @param tabular Deprecated and ignored. Data frames are always written as a
 #'   tabular TOON array; passing anything other than TRUE gives a warning.
-#' @param strict Logical. If TRUE (default), enforce strict syntax on output.
+#' @param strict Deprecated and ignored (see [to_toon()]).
+#' @param delimiter Document delimiter: `","` (default), `"\t"` or `"|"`.
 #' @param col_types Named character vector specifying column types.
 #'
 #' @return Invisibly returns NULL.
@@ -127,10 +130,11 @@ toon_to_csv <- function(path_toon, path_csv, key = NULL, strict = TRUE,
 #'
 #' @export
 csv_to_toon <- function(path_csv, path_toon, tabular = TRUE, strict = TRUE,
-                        col_types = NULL) {
+                        col_types = NULL, delimiter = ",") {
   check_string(path_csv)
   check_string(path_toon)
   warn_tabular_deprecated(tabular)
+  if (!missing(strict)) warn_encoder_strict_deprecated()
 
   # Read CSV
   df <- read.csv(path_csv, stringsAsFactors = FALSE)
@@ -152,7 +156,7 @@ csv_to_toon <- function(path_csv, path_toon, tabular = TRUE, strict = TRUE,
   }
 
   # Write TOON
-  write_toon_df(df, path_toon, strict = strict)
+  write_toon_df(df, path_toon, delimiter = delimiter)
 
   invisible(NULL)
 }
@@ -204,7 +208,8 @@ toon_to_parquet <- function(path_toon, path_parquet, key = NULL, strict = TRUE,
 #' @param path_toon Character scalar. Path to output TOON file.
 #' @param tabular Deprecated and ignored. Data frames are always written as a
 #'   tabular TOON array; passing anything other than TRUE gives a warning.
-#' @param strict Logical. If TRUE (default), enforce strict syntax on output.
+#' @param strict Deprecated and ignored (see [to_toon()]).
+#' @param delimiter Document delimiter: `","` (default), `"\t"` or `"|"`.
 #'
 #' @return Invisibly returns NULL.
 #'
@@ -218,7 +223,7 @@ toon_to_parquet <- function(path_toon, path_parquet, key = NULL, strict = TRUE,
 #'
 #' @export
 parquet_to_toon <- function(path_parquet, path_toon, tabular = TRUE,
-                            strict = TRUE) {
+                            strict = TRUE, delimiter = ",") {
   if (!requireNamespace("arrow", quietly = TRUE)) {
     stop("Install arrow to use parquet/feather conversion: install.packages('arrow')")
   }
@@ -226,12 +231,13 @@ parquet_to_toon <- function(path_parquet, path_toon, tabular = TRUE,
   check_string(path_parquet)
   check_string(path_toon)
   warn_tabular_deprecated(tabular)
+  if (!missing(strict)) warn_encoder_strict_deprecated()
 
   # Read Parquet
   df <- as.data.frame(arrow::read_parquet(path_parquet))
 
   # Write TOON
-  write_toon_df(df, path_toon, strict = strict)
+  write_toon_df(df, path_toon, delimiter = delimiter)
 
   invisible(NULL)
 }
@@ -281,7 +287,8 @@ toon_to_feather <- function(path_toon, path_feather, key = NULL, strict = TRUE,
 #' @param path_toon Character scalar. Path to output TOON file.
 #' @param tabular Deprecated and ignored. Data frames are always written as a
 #'   tabular TOON array; passing anything other than TRUE gives a warning.
-#' @param strict Logical. If TRUE (default), enforce strict syntax on output.
+#' @param strict Deprecated and ignored (see [to_toon()]).
+#' @param delimiter Document delimiter: `","` (default), `"\t"` or `"|"`.
 #'
 #' @return Invisibly returns NULL.
 #'
@@ -295,7 +302,7 @@ toon_to_feather <- function(path_toon, path_feather, key = NULL, strict = TRUE,
 #'
 #' @export
 feather_to_toon <- function(path_feather, path_toon, tabular = TRUE,
-                            strict = TRUE) {
+                            strict = TRUE, delimiter = ",") {
   if (!requireNamespace("arrow", quietly = TRUE)) {
     stop("Install arrow to use parquet/feather conversion: install.packages('arrow')")
   }
@@ -303,12 +310,13 @@ feather_to_toon <- function(path_feather, path_toon, tabular = TRUE,
   check_string(path_feather)
   check_string(path_toon)
   warn_tabular_deprecated(tabular)
+  if (!missing(strict)) warn_encoder_strict_deprecated()
 
   # Read Feather
   df <- as.data.frame(arrow::read_feather(path_feather))
 
   # Write TOON
-  write_toon_df(df, path_toon, strict = strict)
+  write_toon_df(df, path_toon, delimiter = delimiter)
 
   invisible(NULL)
 }

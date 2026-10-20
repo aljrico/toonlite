@@ -4,7 +4,13 @@
 \alias{parquet_to_toon}
 \title{Convert Parquet to TOON}
 \usage{
-parquet_to_toon(path_parquet, path_toon, tabular = TRUE, strict = TRUE)
+parquet_to_toon(
+  path_parquet,
+  path_toon,
+  tabular = TRUE,
+  strict = TRUE,
+  delimiter = ","
+)
 }
 \arguments{
 \item{path_parquet}{Character scalar. Path to input Parquet file.}
@@ -14,7 +20,9 @@ parquet_to_toon(path_parquet, path_toon, tabular = TRUE, strict = TRUE)
 \item{tabular}{Deprecated and ignored. Data frames are always written as a
 tabular TOON array; passing anything other than TRUE gives a warning.}
 
-\item{strict}{Logical. If TRUE (default), enforce strict syntax on output.}
+\item{strict}{Deprecated and ignored (see \code{\link[=to_toon]{to_toon()}}).}
+
+\item{delimiter}{Document delimiter: \code{","} (default), \code{"\\t"} or \code{"|"}.}
 }
 \value{
 Invisibly returns NULL.
