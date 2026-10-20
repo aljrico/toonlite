@@ -46,8 +46,10 @@ json_to_toon <- function(json, pretty = TRUE, strict = TRUE,
 #'
 #' @param toon Character scalar containing TOON.
 #' @param pretty Logical. If TRUE, use multi-line JSON formatting (default FALSE).
-#' @param strict Logical. If TRUE (default), enforce strict syntax.
-#' @param allow_comments Logical. If TRUE (default), allow comments in input.
+#' @param strict Logical. If TRUE (default), apply the spec's strict decoding
+#'   rules; FALSE applies its non-strict recoveries (see [from_toon()]).
+#' @param allow_comments Deprecated and ignored: comment lines are always
+#'   skipped (see [from_toon()]).
 #'
 #' @return Character scalar containing JSON.
 #'
@@ -84,8 +86,10 @@ toon_to_json <- function(toon, pretty = FALSE, strict = TRUE,
 #' @param path_csv Character scalar. Path to output CSV file.
 #' @param key Character scalar or NULL. If non-NULL, extract tabular array at
 #'   root\[key\].
-#' @param strict Logical. If TRUE (default), enforce strict syntax.
-#' @param allow_comments Logical. If TRUE (default), allow comments.
+#' @param strict Logical. If TRUE (default), apply the spec's strict decoding
+#'   rules; FALSE applies its non-strict recoveries (see [from_toon()]).
+#' @param allow_comments Deprecated and ignored: comment lines are always
+#'   skipped (see [read_toon_df()]).
 #' @param warn Logical. If TRUE (default), emit warnings.
 #'
 #' @return Invisibly returns NULL.
@@ -168,8 +172,10 @@ csv_to_toon <- function(path_csv, path_toon, tabular = TRUE, strict = TRUE,
 #' @param path_toon Character scalar. Path to input TOON file.
 #' @param path_parquet Character scalar. Path to output Parquet file.
 #' @param key Character scalar or NULL. If non-NULL, extract tabular array.
-#' @param strict Logical. If TRUE (default), enforce strict syntax.
-#' @param allow_comments Logical. If TRUE (default), allow comments.
+#' @param strict Logical. If TRUE (default), apply the spec's strict decoding
+#'   rules; FALSE applies its non-strict recoveries (see [from_toon()]).
+#' @param allow_comments Deprecated and ignored: comment lines are always
+#'   skipped (see [read_toon_df()]).
 #' @param warn Logical. If TRUE (default), emit warnings.
 #'
 #' @return Invisibly returns NULL.
@@ -247,8 +253,10 @@ parquet_to_toon <- function(path_parquet, path_toon, tabular = TRUE,
 #' @param path_toon Character scalar. Path to input TOON file.
 #' @param path_feather Character scalar. Path to output Feather file.
 #' @param key Character scalar or NULL. If non-NULL, extract tabular array.
-#' @param strict Logical. If TRUE (default), enforce strict syntax.
-#' @param allow_comments Logical. If TRUE (default), allow comments.
+#' @param strict Logical. If TRUE (default), apply the spec's strict decoding
+#'   rules; FALSE applies its non-strict recoveries (see [from_toon()]).
+#' @param allow_comments Deprecated and ignored: comment lines are always
+#'   skipped (see [read_toon_df()]).
 #' @param warn Logical. If TRUE (default), emit warnings.
 #'
 #' @return Invisibly returns NULL.

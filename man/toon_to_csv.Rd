@@ -21,9 +21,11 @@ toon_to_csv(
 \item{key}{Character scalar or NULL. If non-NULL, extract tabular array at
 root[key].}
 
-\item{strict}{Logical. If TRUE (default), enforce strict syntax.}
+\item{strict}{Logical. If TRUE (default), apply the spec's strict decoding
+rules; FALSE applies its non-strict recoveries (see \code{\link[=from_toon]{from_toon()}}).}
 
-\item{allow_comments}{Logical. If TRUE (default), allow comments.}
+\item{allow_comments}{Deprecated and ignored: comment lines are always
+skipped (see \code{\link[=read_toon_df]{read_toon_df()}}).}
 
 \item{warn}{Logical. If TRUE (default), emit warnings.}
 }

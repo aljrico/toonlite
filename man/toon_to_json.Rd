@@ -11,9 +11,11 @@ toon_to_json(toon, pretty = FALSE, strict = TRUE, allow_comments = TRUE)
 
 \item{pretty}{Logical. If TRUE, use multi-line JSON formatting (default FALSE).}
 
-\item{strict}{Logical. If TRUE (default), enforce strict syntax.}
+\item{strict}{Logical. If TRUE (default), apply the spec's strict decoding
+rules; FALSE applies its non-strict recoveries (see \code{\link[=from_toon]{from_toon()}}).}
 
-\item{allow_comments}{Logical. If TRUE (default), allow comments in input.}
+\item{allow_comments}{Deprecated and ignored: comment lines are always
+skipped (see \code{\link[=from_toon]{from_toon()}}).}
 }
 \value{
 Character scalar containing JSON.
