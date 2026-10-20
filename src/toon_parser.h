@@ -122,7 +122,6 @@ private:
     std::optional<bool> parse_bool(std::string_view text);
     std::optional<int64_t> parse_integer(std::string_view text);
     std::optional<double> parse_number(std::string_view text);
-    std::optional<std::string> parse_quoted_string(std::string_view text);
 
     // Header parsing
     TabularHeader parse_array_header(std::string_view text);

@@ -13,7 +13,8 @@ json_to_toon(json, pretty = TRUE, strict = TRUE, allow_comments = TRUE)
 
 \item{strict}{Logical. If TRUE (default), enforce strict syntax.}
 
-\item{allow_comments}{Logical. If TRUE (default), allow comments in output.}
+\item{allow_comments}{Logical. Currently has no effect: JSON input cannot
+contain comments and the encoder never writes them.}
 }
 \value{
 Character scalar with class "toon".

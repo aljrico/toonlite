@@ -101,3 +101,22 @@ test_that("indent parameter works", {
   # Should have 4-space indentation
   expect_true(grepl("    b:", result))
 })
+
+test_that("NA_real_ encodes as null in strict mode", {
+  expect_identical(unclass(to_toon(NA_real_)), "null")
+  expect_identical(from_toon(to_toon(c(1.5, NA))), c(1.5, NA))
+
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  write_toon_df(data.frame(x = c(1.5, NA)), tmp)
+  expect_identical(read_toon_df(tmp)$x, c(1.5, NA))
+
+  # Real NaN/Inf are still rejected
+  expect_error(to_toon(data.frame(x = c(1, NaN))), "NaN")
+  expect_error(to_toon(data.frame(x = c(1, Inf))), "Inf")
+})
+
+test_that("json_to_toon does not warn about allow_comments", {
+  skip_if_not_installed("jsonlite")
+  expect_silent(json_to_toon('{"a": 1, "b": [1, 2]}'))
+})

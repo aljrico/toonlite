@@ -8,8 +8,8 @@
 namespace toonlite {
 
 // ColBuilder implementation
-ColBuilder::ColBuilder(const std::string& name, size_t initial_capacity)
-    : name_(name), capacity_(initial_capacity) {
+ColBuilder::ColBuilder(const std::string& name, size_t initial_capacity, bool strict)
+    : name_(name), strict_(strict), capacity_(initial_capacity) {
     na_mask_.reserve(initial_capacity);
 }
 
@@ -244,31 +244,16 @@ void ColBuilder::parse_and_store(size_t row, std::string_view value) {
         return;
     }
 
-    // Check for quoted string
+    // Check for quoted string. Decode exactly like the DOM parser: if the
+    // literal has an invalid escape in strict mode, keep the raw text, as
+    // read_toon() does for tabular cells.
     if (value.size() >= 2 && value.front() == '"' && value.back() == '"') {
-        std::string unquoted;
-        unquoted.reserve(value.size() - 2);
-
-        for (size_t i = 1; i < value.size() - 1; i++) {
-            if (value[i] == '\\' && i + 1 < value.size() - 1) {
-                char next = value[i + 1];
-                switch (next) {
-                    case '"': unquoted += '"'; i++; break;
-                    case '\\': unquoted += '\\'; i++; break;
-                    case 'n': unquoted += '\n'; i++; break;
-                    case 'r': unquoted += '\r'; i++; break;
-                    case 't': unquoted += '\t'; i++; break;
-                    default: unquoted += value[i]; break;
-                }
-            } else {
-                unquoted += value[i];
-            }
-        }
+        auto unquoted = unescape_quoted_string(value, strict_);
 
         promote_to(ColType::STRING);
         str_data_.resize(row + 1, "");
         na_mask_.resize(row + 1, true);
-        str_data_[row] = std::move(unquoted);
+        str_data_[row] = unquoted ? std::move(*unquoted) : std::string(value);
         na_mask_[row] = false;
         if (row >= size_) size_ = row + 1;
         return;
@@ -286,7 +271,9 @@ void ColBuilder::parse_and_store(size_t row, std::string_view value) {
         int64_t int_val;
         auto result = std::from_chars(value.data(), value.data() + value.size(), int_val);
         if (result.ec == std::errc{} && result.ptr == value.data() + value.size()) {
-            if (int_val >= INT32_MIN && int_val <= INT32_MAX) {
+            // INT32_MIN is R's NA_integer_: exclude it (like the DOM parser)
+            // so it falls through to double instead of silently becoming NA.
+            if (int_val > INT32_MIN && int_val <= INT32_MAX) {
                 if (type_ == ColType::UNKNOWN) {
                     type_ = ColType::INTEGER;
                     int_data_.resize(row + 1, NA_INTEGER);
@@ -489,7 +476,7 @@ bool TabularParser::parse_header(std::string_view header) {
 
     // Create column builders
     for (const auto& name : field_names_) {
-        columns_.emplace_back(name, std::max(size_t(1000), declared_rows_));
+        columns_.emplace_back(name, std::max(size_t(1000), declared_rows_), opts_.strict);
     }
 
     // Apply user-specified column types
@@ -569,7 +556,7 @@ void TabularParser::parse_row_line(std::string_view line, size_t line_no) {
 
             for (size_t i = columns_.size(); i < n_fields; i++) {
                 std::string new_name = "V" + std::to_string(i + 1);
-                columns_.emplace_back(new_name, std::max(size_t(1000), declared_rows_));
+                columns_.emplace_back(new_name, std::max(size_t(1000), declared_rows_), opts_.strict);
                 field_names_.push_back(new_name);
 
                 // Backfill with NA

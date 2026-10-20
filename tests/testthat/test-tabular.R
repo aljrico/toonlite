@@ -140,3 +140,33 @@ test_that("type inference promotes correctly", {
 
   unlink(tmp)
 })
+
+test_that("read_toon_df reads INT32_MIN as double, not NA", {
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  writeLines("[2]{x}:\n  -2147483648\n  5", tmp)
+
+  result <- read_toon_df(tmp)
+
+  expect_type(result$x, "double")
+  expect_identical(result$x, c(-2147483648, 5))
+  # Same rule as the DOM parser
+  expect_identical(from_toon("x: -2147483648")$x, -2147483648)
+})
+
+test_that("read_toon_df decodes quoted strings exactly like read_toon", {
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  writeLines('[3]{s}:\n  "caf\\u00e9"\n  "\\u0041\\t"\n  "bad\\qesc"', tmp)
+
+  for (strict in c(TRUE, FALSE)) {
+    df <- read_toon_df(tmp, strict = strict)
+    dom <- vapply(read_toon(tmp, strict = strict), function(r) r$s, character(1))
+    expect_identical(df$s, dom)
+  }
+
+  expect_identical(read_toon_df(tmp)$s[1:2], c("café", "A\t"))
+  # Invalid escape: strict keeps the raw literal, permissive decodes leniently
+  expect_identical(read_toon_df(tmp, strict = TRUE)$s[3], '"bad\\qesc"')
+  expect_identical(read_toon_df(tmp, strict = FALSE)$s[3], "bad\\qesc")
+})

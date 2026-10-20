@@ -101,12 +101,12 @@ private:
     std::vector<std::string> schema_;
     int indent_;
     std::ofstream file_;
+    WriteBuffer buf_{64 * 1024};
     size_t rows_written_ = 0;
     bool header_written_ = false;
     bool closed_ = false;
 
     void write_header();
-    void write_row(SEXP df, R_xlen_t row);
 };
 
 } // namespace toonlite

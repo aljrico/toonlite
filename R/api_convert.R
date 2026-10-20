@@ -10,7 +10,8 @@ NULL
 #' @param json Character scalar containing JSON.
 #' @param pretty Logical. If TRUE (default), use multi-line formatting.
 #' @param strict Logical. If TRUE (default), enforce strict syntax.
-#' @param allow_comments Logical. If TRUE (default), allow comments in output.
+#' @param allow_comments Logical. Currently has no effect: JSON input cannot
+#'   contain comments and the encoder never writes them.
 #'
 #' @return Character scalar with class "toon".
 #'
@@ -36,8 +37,9 @@ json_to_toon <- function(json, pretty = TRUE, strict = TRUE,
   # Parse JSON to R object
   obj <- jsonlite::fromJSON(json, simplifyVector = FALSE)
 
-  # Convert to TOON
-  to_toon(obj, pretty = pretty, strict = strict, allow_comments = allow_comments)
+  # Convert to TOON (allow_comments is not forwarded: to_toon() would warn
+  # that it has no effect)
+  to_toon(obj, pretty = pretty, strict = strict)
 }
 
 #' Convert TOON to JSON

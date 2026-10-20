@@ -7,8 +7,15 @@
 #include <vector>
 #include <cstddef>
 #include <memory>
+#include <optional>
 
 namespace toonlite {
+
+// Decode a double-quoted TOON string literal (quotes included). Handles
+// \" \\ \n \r \t and \uXXXX (BMP). Returns nullopt if `text` is not quoted
+// or, when `strict`, if it contains an invalid escape sequence. Shared by
+// the DOM parser and the tabular column builder so both decode identically.
+std::optional<std::string> unescape_quoted_string(std::string_view text, bool strict);
 
 // Buffered line reader for efficient file I/O
 class BufferedReader {

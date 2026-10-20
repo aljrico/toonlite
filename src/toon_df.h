@@ -39,7 +39,7 @@ enum class ColType {
 // Column builder for efficient vector construction
 class ColBuilder {
 public:
-    ColBuilder(const std::string& name, size_t initial_capacity = 1000);
+    ColBuilder(const std::string& name, size_t initial_capacity = 1000, bool strict = true);
 
     const std::string& name() const { return name_; }
     ColType type() const { return type_; }
@@ -63,6 +63,7 @@ private:
     void parse_and_store(size_t row, std::string_view value);
 
     std::string name_;
+    bool strict_;  // strict escape decoding for quoted strings
     ColType type_ = ColType::UNKNOWN;
     size_t size_ = 0;
     size_t capacity_ = 0;

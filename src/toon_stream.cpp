@@ -1,4 +1,5 @@
 #include "toon_stream.h"
+#include "toon_encoder.h"
 #include <charconv>
 #include <algorithm>
 #include <cctype>
@@ -191,7 +192,7 @@ void RowStreamer::process_batch() {
     // Reset batch
     batch_columns_.clear();
     for (const auto& name : field_names_) {
-        batch_columns_.emplace_back(name, opts_.batch_size);
+        batch_columns_.emplace_back(name, opts_.batch_size, opts_.strict);
     }
     batch_rows_ = 0;
 
@@ -205,7 +206,7 @@ void RowStreamer::stream(SEXP callback) {
 
     // Initialize batch columns
     for (const auto& name : field_names_) {
-        batch_columns_.emplace_back(name, opts_.batch_size);
+        batch_columns_.emplace_back(name, opts_.batch_size, opts_.strict);
     }
 
     // Apply user-specified column types
@@ -275,7 +276,7 @@ void RowStreamer::stream(SEXP callback) {
 
                 for (size_t i = batch_columns_.size(); i < n_fields; i++) {
                     std::string new_name = "V" + std::to_string(i + 1);
-                    batch_columns_.emplace_back(new_name, opts_.batch_size);
+                    batch_columns_.emplace_back(new_name, opts_.batch_size, opts_.strict);
                     field_names_.push_back(new_name);
 
                     for (size_t r = 0; r < batch_rows_; r++) {
@@ -314,7 +315,7 @@ void RowStreamer::stream(SEXP callback) {
             // Reset batch
             batch_columns_.clear();
             for (const auto& name : field_names_) {
-                batch_columns_.emplace_back(name, opts_.batch_size);
+                batch_columns_.emplace_back(name, opts_.batch_size, opts_.strict);
             }
             batch_rows_ = 0;
         }
@@ -415,88 +416,33 @@ void StreamWriter::write_header() {
     header_written_ = true;
 }
 
-void StreamWriter::write_row(SEXP df, R_xlen_t row) {
-    R_xlen_t ncol = Rf_xlength(df);
-
-    for (int i = 0; i < indent_; i++) {
-        file_ << ' ';
-    }
-
-    for (R_xlen_t j = 0; j < ncol; j++) {
-        if (j > 0) file_ << ", ";
-
-        SEXP col = VECTOR_ELT(df, j);
-
-        switch (TYPEOF(col)) {
-            case LGLSXP: {
-                int val = LOGICAL(col)[row];
-                if (val == NA_LOGICAL) {
-                    file_ << "null";
-                } else {
-                    file_ << (val ? "true" : "false");
-                }
-                break;
-            }
-            case INTSXP: {
-                int val = INTEGER(col)[row];
-                if (val == NA_INTEGER) {
-                    file_ << "null";
-                } else {
-                    file_ << val;
-                }
-                break;
-            }
-            case REALSXP: {
-                double val = REAL(col)[row];
-                if (ISNA(val) || ISNAN(val)) {
-                    file_ << "null";
-                } else {
-                    file_ << std::setprecision(17) << val;
-                }
-                break;
-            }
-            case STRSXP: {
-                SEXP elem = STRING_ELT(col, row);
-                if (elem == NA_STRING) {
-                    file_ << "null";
-                } else {
-                    // Write escaped string
-                    file_ << '"';
-                    const char* s = CHAR(elem);
-                    while (*s) {
-                        switch (*s) {
-                            case '"': file_ << "\\\""; break;
-                            case '\\': file_ << "\\\\"; break;
-                            case '\n': file_ << "\\n"; break;
-                            case '\r': file_ << "\\r"; break;
-                            case '\t': file_ << "\\t"; break;
-                            default: file_ << *s; break;
-                        }
-                        s++;
-                    }
-                    file_ << '"';
-                }
-                break;
-            }
-            default:
-                file_ << "null";
-                break;
-        }
-    }
-
-    file_ << '\n';
-    rows_written_++;
-}
-
 void StreamWriter::write_batch(SEXP df_batch) {
     if (!header_written_) {
         write_header();
     }
 
+    // Rows are formatted by the same cell writer as write_toon_df(), so a
+    // streamed file reads back exactly like one written in a single call.
+    // Non-finite doubles become null (write_toon_df(strict = FALSE)).
+    R_xlen_t ncol = Rf_xlength(df_batch);
     R_xlen_t nrow = Rf_xlength(VECTOR_ELT(df_batch, 0));
+    buf_.clear();
     for (R_xlen_t i = 0; i < nrow; i++) {
-        write_row(df_batch, i);
+        for (int k = 0; k < indent_; k++) {
+            buf_.append_char(' ');
+        }
+        for (R_xlen_t j = 0; j < ncol; j++) {
+            if (j > 0) buf_.append(", ", 2);
+            append_tabular_cell(buf_, VECTOR_ELT(df_batch, j), i, false);
+        }
+        buf_.append_char('\n');
     }
+
+    file_.write(buf_.view().data(), static_cast<std::streamsize>(buf_.size()));
+    if (!file_) {
+        throw ParseError("Error writing to file: " + filepath_, 0, 0, "", filepath_);
+    }
+    rows_written_ += static_cast<size_t>(nrow);
 }
 
 void StreamWriter::close() {

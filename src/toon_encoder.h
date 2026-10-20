@@ -24,6 +24,12 @@
 
 namespace toonlite {
 
+// Append row `i` of data.frame column `col` as one tabular TOON cell, exactly
+// as write_toon_df() writes it: NA -> null, factor -> quoted level, strings
+// escaped, doubles at 17 significant digits. NaN/Inf throw when `strict`,
+// otherwise become null. Shared by Encoder and StreamWriter.
+void append_tabular_cell(WriteBuffer& buf, SEXP col, R_xlen_t i, bool strict);
+
 // Encoder options
 struct EncodeOptions {
     bool pretty = true;
@@ -60,9 +66,6 @@ private:
     void write_newline();
     void write_string(const char* s);
     void write_escaped_string(const char* s);
-
-    // Check for special values in strict mode
-    void check_special_double(double val);
 
     EncodeOptions opts_;
     WriteBuffer buf_;

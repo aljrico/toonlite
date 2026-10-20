@@ -32,14 +32,79 @@ void Encoder::write_escaped_string(const char* s) {
     buf_.append_escaped_string(std::string_view(s));
 }
 
-void Encoder::check_special_double(double val) {
-    if (opts_.strict) {
+// NaN/Inf are rejected in strict mode. NA_real_ is not passed here: it is a
+// missing value and always encodes as null.
+static void check_special_double(double val, bool strict) {
+    if (strict) {
         if (std::isnan(val)) {
             throw ParseError("NaN values not allowed in strict mode");
         }
         if (std::isinf(val)) {
             throw ParseError("Inf/-Inf values not allowed in strict mode");
         }
+    }
+}
+
+void append_tabular_cell(WriteBuffer& buf, SEXP col, R_xlen_t i, bool strict) {
+    switch (TYPEOF(col)) {
+        case LGLSXP: {
+            int val = LOGICAL(col)[i];
+            if (val == NA_LOGICAL) {
+                buf.append("null", 4);
+            } else if (val) {
+                buf.append("true", 4);
+            } else {
+                buf.append("false", 5);
+            }
+            break;
+        }
+        case INTSXP: {
+            // Check if it's a factor
+            SEXP levels = Rf_getAttrib(col, R_LevelsSymbol);
+            if (levels != R_NilValue) {
+                int idx = INTEGER(col)[i];
+                R_xlen_t nlevels = Rf_xlength(levels);
+                if (idx == NA_INTEGER || idx < 1 || idx > nlevels) {
+                    buf.append("null", 4);
+                } else {
+                    buf.append_escaped_string(CHAR(STRING_ELT(levels, idx - 1)));
+                }
+            } else {
+                int val = INTEGER(col)[i];
+                if (val == NA_INTEGER) {
+                    buf.append("null", 4);
+                } else {
+                    buf.append(std::to_string(val));
+                }
+            }
+            break;
+        }
+        case REALSXP: {
+            double val = REAL(col)[i];
+            if (ISNA(val)) {
+                buf.append("null", 4);
+            } else if (std::isnan(val) || std::isinf(val)) {
+                check_special_double(val, strict);
+                buf.append("null", 4);
+            } else {
+                std::ostringstream oss;
+                oss << std::setprecision(17) << val;
+                buf.append(oss.str());
+            }
+            break;
+        }
+        case STRSXP: {
+            SEXP elem = STRING_ELT(col, i);
+            if (elem == NA_STRING) {
+                buf.append("null", 4);
+            } else {
+                buf.append_escaped_string(CHAR(elem));
+            }
+            break;
+        }
+        default:
+            buf.append("null", 4);
+            break;
     }
 }
 
@@ -114,12 +179,11 @@ void Encoder::encode_double(SEXP x) {
     double* data = REAL(x);
 
     auto format_double = [this](double val) {
-        if (ISNA(val) || ISNAN(val)) {
-            check_special_double(val);
+        if (ISNA(val)) {
             return std::string("null");
         }
-        if (std::isinf(val)) {
-            check_special_double(val);
+        if (ISNAN(val) || std::isinf(val)) {
+            check_special_double(val, opts_.strict);
             return std::string("null"); // Fallback for non-strict
         }
 
@@ -286,67 +350,7 @@ void Encoder::encode_dataframe_tabular(SEXP df, int depth) {
         for (R_xlen_t j = 0; j < ncol; j++) {
             if (j > 0) buf_.append(", ", 2);
 
-            SEXP col = VECTOR_ELT(df, j);
-
-            switch (TYPEOF(col)) {
-                case LGLSXP: {
-                    int val = LOGICAL(col)[i];
-                    if (val == NA_LOGICAL) {
-                        write_string("null");
-                    } else {
-                        write_string(val ? "true" : "false");
-                    }
-                    break;
-                }
-                case INTSXP: {
-                    // Check if it's a factor
-                    SEXP levels = Rf_getAttrib(col, R_LevelsSymbol);
-                    if (levels != R_NilValue) {
-                        int idx = INTEGER(col)[i];
-                        R_xlen_t nlevels = Rf_xlength(levels);
-                        if (idx == NA_INTEGER || idx < 1 || idx > nlevels) {
-                            write_string("null");
-                        } else {
-                            write_escaped_string(CHAR(STRING_ELT(levels, idx - 1)));
-                        }
-                    } else {
-                        int val = INTEGER(col)[i];
-                        if (val == NA_INTEGER) {
-                            write_string("null");
-                        } else {
-                            buf_.append(std::to_string(val));
-                        }
-                    }
-                    break;
-                }
-                case REALSXP: {
-                    double val = REAL(col)[i];
-                    if (ISNA(val) || ISNAN(val)) {
-                        check_special_double(val);
-                        write_string("null");
-                    } else if (std::isinf(val)) {
-                        check_special_double(val);
-                        write_string("null");
-                    } else {
-                        std::ostringstream oss;
-                        oss << std::setprecision(17) << val;
-                        buf_.append(oss.str());
-                    }
-                    break;
-                }
-                case STRSXP: {
-                    SEXP elem = STRING_ELT(col, i);
-                    if (elem == NA_STRING) {
-                        write_string("null");
-                    } else {
-                        write_escaped_string(CHAR(elem));
-                    }
-                    break;
-                }
-                default:
-                    write_string("null");
-                    break;
-            }
+            append_tabular_cell(buf_, VECTOR_ELT(df, j), i, opts_.strict);
         }
         write_newline();
     }
