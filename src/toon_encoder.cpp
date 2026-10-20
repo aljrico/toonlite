@@ -15,7 +15,7 @@ namespace {
 // mistake; stop before the C stack runs out.
 constexpr size_t kMaxDepth = 10000;
 
-bool has_class(SEXP x, const char* cls) { return OBJECT(x) && Rf_inherits(x, cls); }
+bool has_class(SEXP x, const char* cls) { return Rf_isObject(x) && Rf_inherits(x, cls); }
 
 bool is_df(SEXP x) { return TYPEOF(x) == VECSXP && has_class(x, "data.frame"); }
 
@@ -240,7 +240,7 @@ PrimVec prim_vec(SEXP x) {
         case INTSXP:
             v.ip = INTEGER(x);
             v.kind = PrimKind::Integer;
-            if (OBJECT(x)) {
+            if (Rf_isObject(x)) {
                 if (Rf_inherits(x, "factor")) {
                     v.kind = PrimKind::Factor;
                     v.levels = Rf_getAttrib(x, R_LevelsSymbol);
@@ -254,7 +254,7 @@ PrimVec prim_vec(SEXP x) {
         case REALSXP:
             v.dp = REAL(x);
             v.kind = PrimKind::Double;
-            if (OBJECT(x)) {
+            if (Rf_isObject(x)) {
                 if (Rf_inherits(x, "integer64")) {
                     v.kind = PrimKind::Int64;
                 } else if (Rf_inherits(x, "Date")) {
