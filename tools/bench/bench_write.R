@@ -5,6 +5,8 @@
 
 library(toonlite)
 
+set.seed(42)
+
 args <- commandArgs(trailingOnly = TRUE)
 iterations <- if (length(args) > 0) as.integer(args[1]) else 3
 
@@ -35,12 +37,12 @@ bench_write <- function(data, write_fn, name, tmp_ext = ".toon") {
   cat(sprintf("  %-40s %6.2f MB  %6.3f sec  %7.2f MB/s\n",
               name, size_mb, median_time, throughput))
 
-  list(
+  invisible(list(
     name = name,
     size_mb = size_mb,
     median_sec = median_time,
     throughput_mbps = throughput
-  )
+  ))
 }
 
 # Generate test data
@@ -82,6 +84,11 @@ nested_medium <- lapply(1:1000, function(i) {
 })
 names(nested_medium) <- paste0("obj", 1:1000)
 
+# Array of records (list of named lists): exercises tabular detection
+records <- lapply(1:100000, function(i) {
+  list(id = i, name = paste0("item_", i), value = runif(1))
+})
+
 cat("Done.\n\n")
 
 # Tabular write benchmarks
@@ -94,6 +101,7 @@ bench_write(df_large, write_toon_df, "1M rows x 4 cols")
 cat("\nGeneral write (write_toon):\n")
 bench_write(nested_small, write_toon, "100 nested objects")
 bench_write(nested_medium, write_toon, "1000 nested objects")
+bench_write(records, write_toon, "100K records (list of lists)")
 
 # to_toon string benchmarks
 cat("\nString serialization (to_toon):\n")

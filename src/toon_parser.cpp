@@ -1,3 +1,4 @@
+#include <array>
 #include <cstring>
 #include <memory>
 #include <stdexcept>
@@ -58,6 +59,164 @@ std::string duplicate_key_message(std::string_view key) {
     return "Duplicate key '" + std::string(key) + "'";
 }
 
+// ---------------------------------------------------------------------------
+// R values
+// ---------------------------------------------------------------------------
+
+class RBuilder {
+public:
+    RBuilder(const Document& d, bool simplify) : d_(d), simplify_(simplify) {}
+
+    SEXP value(uint32_t id) {
+        const Node& n = d_.nodes[id];
+        switch (n.kind) {
+            case NodeKind::Array: return array(n);
+            case NodeKind::Object: return object(n);
+            case NodeKind::Table: return table(n);
+            default: return scalar(n);
+        }
+    }
+
+    // The first `count` rows of a tabular array as a list of row objects.
+    SEXP rows(const Table& t, size_t count) {
+        SEXP names = PROTECT(group_names(t));
+        SEXP out = PROTECT(Rf_allocVector(VECSXP, static_cast<R_xlen_t>(count)));
+        for (size_t i = 0; i < count; i++) {
+            if ((i & 0xFFFF) == 0xFFFF) check_interrupt();
+            SET_VECTOR_ELT(out, static_cast<R_xlen_t>(i), row(t, 0, i, names));
+        }
+        UNPROTECT(2);
+        return out;
+    }
+
+private:
+    SEXP str(uint64_t off, uint32_t len) const { return mkchar_utf8(d_.str(off, len)); }
+
+    SEXP scalar(const Node& n) const {
+        switch (n.kind) {
+            case NodeKind::Bool: return Rf_ScalarLogical(n.b ? TRUE : FALSE);
+            case NodeKind::Int: return Rf_ScalarInteger(n.i);
+            case NodeKind::Double: return Rf_ScalarReal(n.d);
+            case NodeKind::String: {
+                SEXP out = PROTECT(Rf_allocVector(STRSXP, 1));
+                SET_STRING_ELT(out, 0, str(n.off, n.len));
+                UNPROTECT(1);
+                return out;
+            }
+            default: return R_NilValue;
+        }
+    }
+
+    // The atomic type an array of primitives simplifies to, or NILSXP.
+    SEXPTYPE simple_type(const Node& n) const {
+        bool lgl = false, num = false, dbl = false, chr = false;
+        for (uint32_t i = 0; i < n.len; i++) {
+            switch (d_.nodes[d_.kids[n.off + i].node].kind) {
+                case NodeKind::Null: break;
+                case NodeKind::Bool: lgl = true; break;
+                case NodeKind::Int: num = true; break;
+                case NodeKind::Double: num = dbl = true; break;
+                case NodeKind::String: chr = true; break;
+                default: return NILSXP;
+            }
+        }
+        if (lgl + num + chr != 1) return NILSXP;  // mixed, or all null
+        return lgl ? LGLSXP : chr ? STRSXP : dbl ? REALSXP : INTSXP;
+    }
+
+    SEXP array(const Node& n) {
+        const SEXPTYPE type = simplify_ && n.len > 0 ? simple_type(n) : NILSXP;
+        if (type != NILSXP) {
+            SEXP out = PROTECT(Rf_allocVector(type, n.len));
+            for (uint32_t i = 0; i < n.len; i++) {
+                const Node& v = d_.nodes[d_.kids[n.off + i].node];
+                const bool na = v.kind == NodeKind::Null;
+                switch (type) {
+                    case LGLSXP: LOGICAL(out)[i] = na ? NA_LOGICAL : (v.b ? TRUE : FALSE); break;
+                    case INTSXP: INTEGER(out)[i] = na ? NA_INTEGER : v.i; break;
+                    case REALSXP:
+                        REAL(out)[i] = na ? NA_REAL : (v.kind == NodeKind::Int ? v.i : v.d);
+                        break;
+                    default: SET_STRING_ELT(out, i, na ? NA_STRING : str(v.off, v.len)); break;
+                }
+            }
+            UNPROTECT(1);
+            return out;
+        }
+        SEXP out = PROTECT(Rf_allocVector(VECSXP, n.len));
+        for (uint32_t i = 0; i < n.len; i++) {
+            SET_VECTOR_ELT(out, i, value(d_.kids[n.off + i].node));
+        }
+        UNPROTECT(1);
+        return out;
+    }
+
+    SEXP object(const Node& n) {
+        SEXP out = PROTECT(Rf_allocVector(VECSXP, n.len));
+        SEXP names = Rf_allocVector(STRSXP, n.len);
+        Rf_setAttrib(out, R_NamesSymbol, names);
+        for (uint32_t i = 0; i < n.len; i++) {
+            const Kid& k = d_.kids[n.off + i];
+            SET_STRING_ELT(names, i, str(k.key_off, k.key_len));
+            SET_VECTOR_ELT(out, i, value(k.node));
+        }
+        UNPROTECT(1);
+        return out;
+    }
+
+    // One row object of field group g. `names` holds each group's names,
+    // shared by every row.
+    SEXP row(const Table& t, size_t g, uint64_t r, SEXP names) {
+        const ResolvedGroup& grp = t.groups[g];
+        const R_xlen_t k = static_cast<R_xlen_t>(grp.keys.size());
+        SEXP out = PROTECT(Rf_allocVector(VECSXP, k));
+        Rf_setAttrib(out, R_NamesSymbol, VECTOR_ELT(names, static_cast<R_xlen_t>(g)));
+        const Node* cells = d_.cells.data() + t.cell_off + r * t.leaves;
+        for (R_xlen_t j = 0; j < k; j++) {
+            if (grp.leaf[j] >= 0) {
+                SET_VECTOR_ELT(out, j, scalar(cells[grp.leaf[j]]));
+            } else {
+                SET_VECTOR_ELT(out, j, row(t, static_cast<size_t>(grp.group[j]), r, names));
+            }
+        }
+        UNPROTECT(1);
+        return out;
+    }
+
+    // Each field group's names, one STRSXP per group.
+    SEXP group_names(const Table& t) const {
+        SEXP names = PROTECT(Rf_allocVector(VECSXP, static_cast<R_xlen_t>(t.groups.size())));
+        for (size_t g = 0; g < t.groups.size(); g++) {
+            const auto& keys = t.groups[g].keys;
+            SEXP nm = Rf_allocVector(STRSXP, static_cast<R_xlen_t>(keys.size()));
+            SET_VECTOR_ELT(names, static_cast<R_xlen_t>(g), nm);
+            for (size_t j = 0; j < keys.size(); j++) {
+                SET_STRING_ELT(nm, static_cast<R_xlen_t>(j), mkchar_utf8(keys[j]));
+            }
+        }
+        UNPROTECT(1);
+        return names;
+    }
+
+    SEXP table(const Node& n) {
+        const Table& t = d_.tables[n.off];
+        if (!t.keyed) return rows(t, n.len);
+        SEXP names = PROTECT(group_names(t));
+        SEXP out = PROTECT(Rf_allocVector(VECSXP, n.len));
+        SEXP keys = Rf_allocVector(STRSXP, n.len);
+        Rf_setAttrib(out, R_NamesSymbol, keys);
+        for (uint32_t i = 0; i < n.len; i++) {
+            SET_STRING_ELT(keys, i, str(t.keys[i].key_off, t.keys[i].key_len));
+            SET_VECTOR_ELT(out, i, row(t, 0, t.rows[i], names));
+        }
+        UNPROTECT(2);
+        return out;
+    }
+
+    const Document& d_;
+    bool simplify_;
+};
+
 // Recursive-descent decoder over the shared lexer. Depths: a scope expects
 // its first line at its nominal content depth c; a deeper first line is a
 // depth jump (an error, or adopted as the scope's actual depth m in
@@ -76,6 +235,17 @@ public:
             lines_.fail(e.what(), at_no_, at_text_);
         }
         return std::move(doc_);
+    }
+
+    // Decode the document, handing the items of the target array to the
+    // callback in batches instead of keeping them.
+    void stream(const ItemStream& s) {
+        stream_ = &s;
+        parse();
+        if (!found_) {
+            throw std::runtime_error(s.has_key ? "Key not found: " + s.key
+                                               : "The document root is not an array; use `key` to select a field");
+        }
     }
 
 private:
@@ -190,19 +360,31 @@ private:
         at(*L);
         const std::string_view s = L->content;
 
+        const LineScan sc = scan_line(s);
+        const bool root_array = s == "[]" || (is_header_line(sc) && sc.bracket == 0);
+        if (stream_ && !stream_->has_key && !root_array) {
+            throw std::runtime_error("The document root is not an array; use `key` to select a field");
+        }
+        if (stream_ && stream_->has_key && (root_array || sc.colon == npos)) {
+            throw std::runtime_error("`key` requires the document root to be an object");
+        }
         if (s == "[]") {
             lines_.consume();
+            if (stream_) start_stream();
             const uint32_t v = empty(NodeKind::Array);
             check_trailing("Unexpected content after the root array");
             return v;
         }
-        const LineScan sc = scan_line(s);
-        if (is_header_line(sc) && sc.bracket == 0) {
+        if (root_array) {
             Header h;
             parse_header(s, sc, strict_, h);
             h.line_no = L->no;
             lines_.consume();
-            const uint32_t v = array_body(h, 1);
+            if (stream_) {
+                if (h.keyed) throw std::runtime_error("The document root is a keyed table, not an array");
+                start_stream();
+            }
+            const uint32_t v = array_body(h, 1, stream_ != nullptr);
             check_trailing(h.keyed ? "Unexpected content after the root keyed table"
                                    : "Unexpected content after the root array");
             return v;
@@ -253,14 +435,25 @@ private:
             if (!h.has_key) {
                 throw LexError("An array header without a key is only valid at the document root or after a list-item marker");
             }
+            const bool streamed = target(h.key, fd);
+            if (streamed && h.keyed) {
+                throw LexError("Field '" + h.key + "' is a keyed table, not an array");
+            }
             const size_t slot = member(ob, h.key);
-            const uint32_t v = array_body(h, fd + 1);
+            if (streamed) start_stream();
+            const uint32_t v = array_body(h, fd + 1, streamed);
             stack_[slot].node = v;
             return;
         }
         if (sc.colon == npos) throw LexError("Expected 'key: value'");
-        const size_t slot = member(ob, key_of(trim_spaces(s.substr(0, sc.colon))));
+        const std::string_view key = key_of(trim_spaces(s.substr(0, sc.colon)));
         const std::string_view value = trim_spaces(s.substr(sc.colon + 1));
+        const bool streamed = target(key, fd);
+        if (streamed && value != "[]") {
+            throw LexError("Field '" + std::string(key) + "' is not an array");
+        }
+        const size_t slot = member(ob, key);
+        if (streamed) start_stream();
         uint32_t v;
         if (value.empty()) {
             v = object_scope(fd);
@@ -295,13 +488,15 @@ private:
     // ---------------------------------------------------------------------
 
     // The value a header opens; its content belongs at depth c.
-    uint32_t array_body(const Header& h, size_t c) {
-        if (h.has_fields) return table(h, c);
-        if (!h.inline_values.empty()) return inline_array(h);
-        return list_items(h, c);
+    // With `streamed`, the items go to the stream instead of the array,
+    // which is returned empty.
+    uint32_t array_body(const Header& h, size_t c, bool streamed = false) {
+        if (h.has_fields) return table(h, c, streamed);
+        if (!h.inline_values.empty()) return inline_array(h, streamed);
+        return list_items(h, c, streamed);
     }
 
-    uint32_t inline_array(const Header& h) {
+    uint32_t inline_array(const Header& h, bool streamed) {
         split_delimited(h.inline_values, h.delim, cells_);
         if (strict_ && !h.count_matches(cells_.size())) {
             throw LexError(count_mismatch_message(h, cells_.size(), "value"));
@@ -310,12 +505,17 @@ private:
         for (const std::string_view tok : cells_) {
             Kid k;
             k.node = add_node(make_scalar(tok));
-            stack_.push_back(k);
+            if (streamed) {
+                emit(k.node);
+            } else {
+                stack_.push_back(k);
+            }
         }
+        if (streamed) flush_items();
         return finish(NodeKind::Array, mark);
     }
 
-    uint32_t list_items(const Header& h, size_t c) {
+    uint32_t list_items(const Header& h, size_t c, bool streamed) {
         const size_t mark = stack_.size();
         size_t n = 0;
         const Line* L = lines_.peek();
@@ -343,7 +543,11 @@ private:
                 at(*L);
                 Kid k;
                 k.node = list_item(rest, m);
-                stack_.push_back(k);
+                if (streamed) {
+                    emit(k.node);
+                } else {
+                    stack_.push_back(k);
+                }
                 if ((++n & 0xFFFF) == 0) check_interrupt();
             }
             if (started) lines_.span_ended();
@@ -352,6 +556,7 @@ private:
         if (strict_ && !h.count_matches(n)) {
             lines_.fail(count_mismatch_message(h, n, "list item"), h.line_no);
         }
+        if (streamed) flush_items();
         return finish(NodeKind::Array, mark);
     }
 
@@ -383,7 +588,7 @@ private:
     }
 
     // Tabular array or keyed tabular object; rows at depth c (spec 9.3, 9.5).
-    uint32_t table(const Header& h, size_t c) {
+    uint32_t table(const Header& h, size_t c, bool streamed) {
         const size_t ti = doc_.tables.size();
         doc_.tables.emplace_back();
         Table& t = doc_.tables.back();
@@ -396,6 +601,7 @@ private:
         std::string_view key_tok;
         KeyIndex keys(0);
         size_t n = 0;
+        size_t pending = 0;  // streamed rows not yet delivered
         while (rows.next(cells_, &key_tok)) {
             at_no_ = rows.line_no();
             at_text_ = rows.line();
@@ -418,9 +624,17 @@ private:
                 }
             }
             if ((++n & 0xFFFF) == 0) check_interrupt();
+            if (streamed && ++pending == stream_->batch_size) {
+                flush_rows(t, pending);
+                pending = 0;
+            }
         }
         if (strict_ && !h.count_matches(n)) {
             lines_.fail(count_mismatch_message(h, n, h.keyed ? "entry" : "row"), h.line_no);
+        }
+        if (streamed) {
+            flush_rows(t, pending);
+            n = 0;
         }
         Node node;
         node.kind = NodeKind::Table;
@@ -429,8 +643,66 @@ private:
         return add_node(node);
     }
 
+    // -- Streaming -------------------------------------------------------
+
+    // Is this field of the root object the streamed array?
+    bool target(std::string_view key, size_t fd) const {
+        return stream_ && stream_->has_key && !found_ && fd == 0 && key == stream_->key;
+    }
+
+    void start_stream() {
+        found_ = true;
+        marks_ = {doc_.nodes.size(), doc_.kids.size(), doc_.cells.size(),
+                  doc_.tables.size(), doc_.pool.size()};
+    }
+
+    // Drop everything decoded since the stream started.
+    void truncate() {
+        doc_.nodes.resize(marks_[0]);
+        doc_.kids.resize(marks_[1]);
+        doc_.cells.resize(marks_[2]);
+        doc_.tables.resize(marks_[3]);
+        doc_.pool.resize(marks_[4]);
+    }
+
+    void deliver(SEXP batch) {
+        PROTECT(batch);
+        call_r_function(stream_->callback, batch);
+        UNPROTECT(1);
+    }
+
+    void emit(uint32_t node) {
+        batch_.push_back(node);
+        if (batch_.size() >= stream_->batch_size) flush_items();
+    }
+
+    void flush_items() {
+        if (batch_.empty()) return;
+        RBuilder b(doc_, stream_->simplify);
+        SEXP list = PROTECT(Rf_allocVector(VECSXP, static_cast<R_xlen_t>(batch_.size())));
+        for (size_t i = 0; i < batch_.size(); i++) {
+            SET_VECTOR_ELT(list, static_cast<R_xlen_t>(i), b.value(batch_[i]));
+        }
+        deliver(list);
+        UNPROTECT(1);
+        batch_.clear();
+        truncate();
+    }
+
+    // Rows [0, count) of a streamed table, relative to its cell block.
+    void flush_rows(Table& t, size_t count) {
+        if (count == 0) return;
+        deliver(RBuilder(doc_, stream_->simplify).rows(t, count));
+        doc_.cells.resize(t.cell_off);
+        doc_.pool.resize(marks_[4]);
+    }
+
     LineReader lines_;
     bool strict_;
+    const ItemStream* stream_ = nullptr;
+    bool found_ = false;
+    std::array<size_t, 5> marks_{};
+    std::vector<uint32_t> batch_;
     Document doc_;
     std::vector<Kid> stack_;
     std::vector<std::string_view> cells_;
@@ -438,151 +710,6 @@ private:
     size_t level_ = 0;
     size_t at_no_ = 0;
     std::string_view at_text_;
-};
-
-// ---------------------------------------------------------------------------
-// R values
-// ---------------------------------------------------------------------------
-
-class RBuilder {
-public:
-    RBuilder(const Document& d, bool simplify) : d_(d), simplify_(simplify) {}
-
-    SEXP value(uint32_t id) {
-        const Node& n = d_.nodes[id];
-        switch (n.kind) {
-            case NodeKind::Array: return array(n);
-            case NodeKind::Object: return object(n);
-            case NodeKind::Table: return table(n);
-            default: return scalar(n);
-        }
-    }
-
-private:
-    SEXP str(uint64_t off, uint32_t len) const { return mkchar_utf8(d_.str(off, len)); }
-
-    SEXP scalar(const Node& n) const {
-        switch (n.kind) {
-            case NodeKind::Bool: return Rf_ScalarLogical(n.b ? TRUE : FALSE);
-            case NodeKind::Int: return Rf_ScalarInteger(n.i);
-            case NodeKind::Double: return Rf_ScalarReal(n.d);
-            case NodeKind::String: {
-                SEXP out = PROTECT(Rf_allocVector(STRSXP, 1));
-                SET_STRING_ELT(out, 0, str(n.off, n.len));
-                UNPROTECT(1);
-                return out;
-            }
-            default: return R_NilValue;
-        }
-    }
-
-    // The atomic type an array of primitives simplifies to, or NILSXP.
-    SEXPTYPE simple_type(const Node& n) const {
-        bool lgl = false, num = false, dbl = false, chr = false;
-        for (uint32_t i = 0; i < n.len; i++) {
-            switch (d_.nodes[d_.kids[n.off + i].node].kind) {
-                case NodeKind::Null: break;
-                case NodeKind::Bool: lgl = true; break;
-                case NodeKind::Int: num = true; break;
-                case NodeKind::Double: num = dbl = true; break;
-                case NodeKind::String: chr = true; break;
-                default: return NILSXP;
-            }
-        }
-        if (lgl + num + chr != 1) return NILSXP;  // mixed, or all null
-        return lgl ? LGLSXP : chr ? STRSXP : dbl ? REALSXP : INTSXP;
-    }
-
-    SEXP array(const Node& n) {
-        const SEXPTYPE type = simplify_ && n.len > 0 ? simple_type(n) : NILSXP;
-        if (type != NILSXP) {
-            SEXP out = PROTECT(Rf_allocVector(type, n.len));
-            for (uint32_t i = 0; i < n.len; i++) {
-                const Node& v = d_.nodes[d_.kids[n.off + i].node];
-                const bool na = v.kind == NodeKind::Null;
-                switch (type) {
-                    case LGLSXP: LOGICAL(out)[i] = na ? NA_LOGICAL : (v.b ? TRUE : FALSE); break;
-                    case INTSXP: INTEGER(out)[i] = na ? NA_INTEGER : v.i; break;
-                    case REALSXP:
-                        REAL(out)[i] = na ? NA_REAL : (v.kind == NodeKind::Int ? v.i : v.d);
-                        break;
-                    default: SET_STRING_ELT(out, i, na ? NA_STRING : str(v.off, v.len)); break;
-                }
-            }
-            UNPROTECT(1);
-            return out;
-        }
-        SEXP out = PROTECT(Rf_allocVector(VECSXP, n.len));
-        for (uint32_t i = 0; i < n.len; i++) {
-            SET_VECTOR_ELT(out, i, value(d_.kids[n.off + i].node));
-        }
-        UNPROTECT(1);
-        return out;
-    }
-
-    SEXP object(const Node& n) {
-        SEXP out = PROTECT(Rf_allocVector(VECSXP, n.len));
-        SEXP names = Rf_allocVector(STRSXP, n.len);
-        Rf_setAttrib(out, R_NamesSymbol, names);
-        for (uint32_t i = 0; i < n.len; i++) {
-            const Kid& k = d_.kids[n.off + i];
-            SET_STRING_ELT(names, i, str(k.key_off, k.key_len));
-            SET_VECTOR_ELT(out, i, value(k.node));
-        }
-        UNPROTECT(1);
-        return out;
-    }
-
-    // One row object of field group g. `names` holds each group's names,
-    // shared by every row.
-    SEXP row(const Table& t, size_t g, uint64_t r, SEXP names) {
-        const ResolvedGroup& grp = t.groups[g];
-        const R_xlen_t k = static_cast<R_xlen_t>(grp.keys.size());
-        SEXP out = PROTECT(Rf_allocVector(VECSXP, k));
-        Rf_setAttrib(out, R_NamesSymbol, VECTOR_ELT(names, static_cast<R_xlen_t>(g)));
-        const Node* cells = d_.cells.data() + t.cell_off + r * t.leaves;
-        for (R_xlen_t j = 0; j < k; j++) {
-            if (grp.leaf[j] >= 0) {
-                SET_VECTOR_ELT(out, j, scalar(cells[grp.leaf[j]]));
-            } else {
-                SET_VECTOR_ELT(out, j, row(t, static_cast<size_t>(grp.group[j]), r, names));
-            }
-        }
-        UNPROTECT(1);
-        return out;
-    }
-
-    SEXP table(const Node& n) {
-        const Table& t = d_.tables[n.off];
-        SEXP names = PROTECT(Rf_allocVector(VECSXP, static_cast<R_xlen_t>(t.groups.size())));
-        for (size_t g = 0; g < t.groups.size(); g++) {
-            const auto& keys = t.groups[g].keys;
-            SEXP nm = Rf_allocVector(STRSXP, static_cast<R_xlen_t>(keys.size()));
-            SET_VECTOR_ELT(names, static_cast<R_xlen_t>(g), nm);
-            for (size_t j = 0; j < keys.size(); j++) {
-                SET_STRING_ELT(nm, static_cast<R_xlen_t>(j), mkchar_utf8(keys[j]));
-            }
-        }
-        SEXP out = PROTECT(Rf_allocVector(VECSXP, n.len));
-        if (t.keyed) {
-            SEXP keys = Rf_allocVector(STRSXP, n.len);
-            Rf_setAttrib(out, R_NamesSymbol, keys);
-            for (uint32_t i = 0; i < n.len; i++) {
-                SET_STRING_ELT(keys, i, str(t.keys[i].key_off, t.keys[i].key_len));
-                SET_VECTOR_ELT(out, i, row(t, 0, t.rows[i], names));
-            }
-        } else {
-            for (uint32_t i = 0; i < n.len; i++) {
-                if ((i & 0xFFFF) == 0xFFFF) check_interrupt();
-                SET_VECTOR_ELT(out, i, row(t, 0, i, names));
-            }
-        }
-        UNPROTECT(2);
-        return out;
-    }
-
-    const Document& d_;
-    bool simplify_;
 };
 
 void count(const Document& d, uint32_t id, DocumentInfo& info) {
@@ -623,6 +750,12 @@ Document parse_toon_file(const std::string& path, const ReadOptions& opts) {
     BufferedReader src(path);
     if (src.has_error()) throw std::runtime_error(src.error_message());
     return Parser(src, opts, path).parse();
+}
+
+void stream_toon_items(const std::string& path, const ReadOptions& opts, const ItemStream& s) {
+    BufferedReader src(path);
+    if (src.has_error()) throw std::runtime_error(src.error_message());
+    Parser(src, opts, path).stream(s);
 }
 
 SEXP document_to_r(const Document& doc, bool simplify) {

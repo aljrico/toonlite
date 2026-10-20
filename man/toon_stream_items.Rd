@@ -2,7 +2,7 @@
 % Please edit documentation in R/api_stream.R
 \name{toon_stream_items}
 \alias{toon_stream_items}
-\title{Stream non-tabular array items}
+\title{Stream array items}
 \usage{
 toon_stream_items(
   file,
@@ -13,42 +13,65 @@ toon_stream_items(
   allow_comments = TRUE,
   allow_duplicate_keys = TRUE,
   warn = TRUE,
-  simplify = TRUE
+  simplify = TRUE,
+  indent = 2L
 )
 }
 \arguments{
 \item{file}{Character scalar. Path to TOON file.}
 
-\item{key}{Character scalar or NULL. If non-NULL, extract array at root[key].}
+\item{key}{Character scalar or NULL. If NULL, the document root must be an
+array. Otherwise the root must be an object and the array is read from
+its field \code{key}.}
 
-\item{callback}{Function. Called with each batch as a list.}
+\item{callback}{Function called with each batch: a list of up to
+\code{batch_size} items, each decoded as by \code{\link[=read_toon]{read_toon()}}.}
 
 \item{batch_size}{Integer. Number of items per batch (default 1000).}
 
-\item{strict}{Logical. If TRUE (default), enforce strict TOON syntax.}
+\item{strict}{Logical. If TRUE (default), apply the spec's strict decoding
+rules: declared lengths must match, indentation must be a multiple of
+\code{indent} with no tabs, blank lines inside arrays and duplicate keys are
+errors. If FALSE, the spec's five non-strict recoveries apply instead
+(count mismatches accepted, duplicate keys resolve last-write-wins,
+tab/odd indentation, blank lines and depth jumps tolerated).}
 
-\item{allow_comments}{Logical. If TRUE (default), allow # and // comments.}
+\item{allow_comments}{Deprecated and ignored. Full-line \verb{#} comments are part
+of TOON and are always skipped; passing anything other than TRUE warns.}
 
-\item{allow_duplicate_keys}{Logical. If TRUE (default), allow duplicate keys.}
+\item{allow_duplicate_keys}{Deprecated and ignored. Duplicate keys are an
+error when \code{strict = TRUE} and resolve last-write-wins when
+\code{strict = FALSE}, as the spec requires. Supplying it warns.}
 
-\item{warn}{Logical. If TRUE (default), emit warnings.}
+\item{warn}{Currently unused: decoding items produces no warnings.}
 
-\item{simplify}{Logical. If TRUE (default), simplify homogeneous batches.}
+\item{simplify}{Logical. If TRUE (default), arrays whose elements are all
+primitives of one type become atomic vectors (\code{null} becomes \code{NA};
+integers mixed with doubles give a double vector).}
+
+\item{indent}{Integer. Spaces per indentation level (the spec's
+\code{indentSize}, default 2).}
 }
 \value{
 Invisibly returns NULL.
 }
 \description{
-Stream non-tabular array items
+Decodes the items of an array one batch at a time and hands each batch to
+\code{callback}, so arrays larger than memory can be processed. Items can be
+any TOON value; rows of a tabular array arrive as row objects (named
+lists). For a data.frame per batch use \code{\link[=toon_stream_rows]{toon_stream_rows()}}.
+}
+\details{
+The rest of the document is decoded and validated as well, but only the
+streamed items are handed out. An error found after some batches were
+delivered (a declared count that does not match in strict mode, or invalid
+content later in the file) is raised after those callbacks ran.
 }
 \examples{
-\dontrun{
-# Stream array items
-toon_stream_items("items.toon",
-  callback = function(batch) {
-    cat("Got", length(batch), "items\n")
-  }
-)
-}
+f <- tempfile(fileext = ".toon")
+write_toon(list(items = list(1, "two", list(x = 3))), f)
+toon_stream_items(f, key = "items", batch_size = 2, callback = function(batch) {
+  str(batch)
+})
 
 }

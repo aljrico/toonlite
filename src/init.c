@@ -10,6 +10,7 @@ extern SEXP C_write_toon(SEXP, SEXP, SEXP, SEXP);
 extern SEXP C_validate_toon(SEXP, SEXP, SEXP, SEXP);
 extern SEXP C_read_toon_df(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP C_stream_rows(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
+extern SEXP C_stream_items(SEXP, SEXP, SEXP, SEXP, SEXP, SEXP, SEXP);
 extern SEXP C_toon_peek(SEXP, SEXP);
 extern SEXP C_toon_info(SEXP, SEXP, SEXP);
 extern SEXP C_stream_write_init(SEXP, SEXP, SEXP, SEXP, SEXP);
@@ -24,6 +25,7 @@ static const R_CallMethodDef CallEntries[] = {
     {"C_validate_toon",      (DL_FUNC) &C_validate_toon,      4},
     {"C_read_toon_df",       (DL_FUNC) &C_read_toon_df,       9},
     {"C_stream_rows",        (DL_FUNC) &C_stream_rows,        11},
+    {"C_stream_items",       (DL_FUNC) &C_stream_items,       7},
     {"C_toon_peek",          (DL_FUNC) &C_toon_peek,          2},
     {"C_toon_info",          (DL_FUNC) &C_toon_info,          3},
     {"C_stream_write_init",  (DL_FUNC) &C_stream_write_init,  5},

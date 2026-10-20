@@ -85,6 +85,21 @@ Document parse_toon_file(const std::string& path, const ReadOptions& opts);
 // The R value of a decoded document (unprotected).
 SEXP document_to_r(const Document& doc, bool simplify);
 
+// Streams the items of the root array, or of the array in the root object's
+// field `key`, to `callback` as lists of at most `batch_size` R values. The
+// rest of the document is decoded and checked but not kept, and memory for
+// the items is reused between batches. Errors found after a batch was
+// delivered (such as a count mismatch or invalid content later in the file)
+// are raised after those callbacks ran.
+struct ItemStream {
+    bool has_key = false;
+    std::string key;
+    size_t batch_size = 1000;
+    bool simplify = true;
+    SEXP callback = R_NilValue;
+};
+void stream_toon_items(const std::string& path, const ReadOptions& opts, const ItemStream& s);
+
 struct DocumentInfo {
     size_t arrays = 0;
     size_t objects = 0;

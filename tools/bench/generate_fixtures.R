@@ -5,6 +5,8 @@
 
 library(toonlite)
 
+set.seed(42)
+
 args <- commandArgs(trailingOnly = TRUE)
 output_dir <- if (length(args) > 0) args[1] else "bench_data"
 

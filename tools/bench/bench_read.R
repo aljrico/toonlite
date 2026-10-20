@@ -45,12 +45,12 @@ bench_read <- function(filepath, read_fn, name) {
   cat(sprintf("  %-40s %6.2f MB  %6.3f sec  %7.2f MB/s\n",
               name, size_mb, median_time, throughput))
 
-  list(
+  invisible(list(
     name = name,
     size_mb = size_mb,
     median_sec = median_time,
     throughput_mbps = throughput
-  )
+  ))
 }
 
 # Tabular benchmarks
@@ -75,6 +75,12 @@ array_results <- lapply(array_files, function(f) {
   bench_read(f, read_toon, basename(f))
 })
 
+# Tabular files through the general reader (builds a list of row objects)
+cat("\nTabular read via read_toon (list of rows):\n")
+for (f in tabular_files) {
+  bench_read(f, read_toon, basename(f))
+}
+
 # Streaming benchmark
 cat("\nStreaming read (toon_stream_rows):\n")
 for (f in tabular_files) {
@@ -93,6 +99,30 @@ for (f in tabular_files) {
   throughput <- size_mb / elapsed
   cat(sprintf("  %-40s %6.2f MB  %6.3f sec  %7.2f MB/s  (%d rows)\n",
               basename(f), size_mb, elapsed, throughput, row_count))
+}
+
+# Item streaming benchmark
+cat("\nStreaming items (toon_stream_items):\n")
+for (f in array_files) {
+  size_mb <- file.info(f)$size / 1024 / 1024
+  n_items <- 0
+
+  gc(verbose = FALSE)
+  start <- Sys.time()
+  ok <- tryCatch({
+    toon_stream_items(f, key = "items", callback = function(batch) {
+      n_items <<- n_items + length(batch)
+    }, batch_size = 1000L)
+    TRUE
+  }, error = function(e) {
+    cat(sprintf("  %-40s FAILED: %s\n", basename(f), conditionMessage(e)))
+    FALSE
+  })
+  if (!ok) next
+  elapsed <- as.numeric(Sys.time() - start, units = "secs")
+
+  cat(sprintf("  %-40s %6.2f MB  %6.3f sec  %7.2f MB/s  (%d items)\n",
+              basename(f), size_mb, elapsed, size_mb / elapsed, n_items))
 }
 
 cat("\nDone!\n")

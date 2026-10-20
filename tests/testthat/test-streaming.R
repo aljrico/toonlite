@@ -42,6 +42,88 @@ test_that("toon_stream_items processes list items", {
   unlink(tmp)
 })
 
+collect_items <- function(lines, ...) {
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  writeLines(lines, tmp)
+  batches <- list()
+  toon_stream_items(tmp, callback = function(b) batches[[length(batches) + 1L]] <<- b, ...)
+  batches
+}
+
+test_that("toon_stream_items streams every array form in batches", {
+  # list form, root array
+  b <- collect_items(c("[5]:", "  - 1", "  - a: 1", "    b[2]: x,y", "  - [2]: 1,2", "  -", "  - z"),
+                     batch_size = 2L)
+  expect_identical(lengths(b), c(2L, 2L, 1L))
+  expect_identical(unlist(b, recursive = FALSE), list(
+    1L, list(a = 1L, b = c("x", "y")), 1:2, setNames(list(), character()), "z"
+  ))
+  # tabular rows arrive as row objects
+  b <- collect_items(c("n: 1", "t[3]{id,g{x}}:", "  1,a", "  2,b", "  3,c", "z: 2"),
+                     key = "t", batch_size = 2L)
+  expect_identical(b, list(
+    list(list(id = 1L, g = list(x = "a")), list(id = 2L, g = list(x = "b"))),
+    list(list(id = 3L, g = list(x = "c")))
+  ))
+  # inline values, and simplify applies inside items
+  expect_identical(collect_items("x[3]: 1,null,c", key = "x"), list(list(1L, NULL, "c")))
+  expect_identical(collect_items(c("[1]:", "  - [2]: 1,2"), simplify = FALSE),
+                   list(list(list(1L, 2L))))
+  # empty arrays never call back
+  expect_identical(collect_items("x: []", key = "x"), list())
+  expect_identical(collect_items("[]"), list())
+})
+
+test_that("toon_stream_items reports a wrong target", {
+  expect_error(collect_items("a: 1"), "root is not an array")
+  expect_error(collect_items("[1]: 1", key = "a"), "requires the document root to be an object")
+  expect_error(collect_items("a: 1", key = "b"), "Key not found: b")
+  expect_error(collect_items("a: 1", key = "a"), "Field 'a' is not an array")
+  expect_error(collect_items(c("a[1:]{x}:", "  k: 1"), key = "a"), "keyed table")
+  # Only fields of the root object qualify
+  expect_error(collect_items(c("o:", "  a[1]: 1"), key = "a"), "Key not found: a")
+})
+
+test_that("toon_stream_items validates the whole document", {
+  # A small array is checked before its only batch is delivered
+  expect_error(collect_items(c("x[3]:", "  - 1", "  - 2"), key = "x"), "Declared 3 list items")
+  expect_identical(collect_items(c("x[3]:", "  - 1", "  - 2"), key = "x", strict = FALSE),
+                   list(list(1L, 2L)))
+  # Content after the target is decoded too
+  calls <- 0L
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  writeLines(c("x[2]:", "  - 1", "  - 2", "y: \"bad"), tmp)
+  expect_error(toon_stream_items(tmp, key = "x", batch_size = 1L,
+                                 callback = function(b) calls <<- calls + 1L),
+               "Unterminated string")
+  expect_identical(calls, 2L)
+})
+
+test_that("toon_stream_items propagates callback errors", {
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  writeLines(c("[3]: 1,2,3"), tmp)
+  expect_error(toon_stream_items(tmp, callback = function(b) stop("boom")), "boom")
+  expect_warning(toon_stream_items(tmp, callback = function(b) warning("careful")), "careful")
+})
+
+test_that("toon_stream_items handles many batches", {
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  n <- 25000L
+  write_toon(list(items = lapply(seq_len(n), function(i) list(id = i, tags = c("a", "b"), s = NULL))), tmp)
+  total <- 0L
+  last <- NULL
+  toon_stream_items(tmp, key = "items", batch_size = 1000L, callback = function(b) {
+    total <<- total + length(b)
+    last <<- b[[length(b)]]
+  })
+  expect_identical(total, n)
+  expect_identical(last, list(id = n, tags = c("a", "b"), s = NULL))
+})
+
 test_that("toon_stream_write_rows creates valid TOON", {
   tmp <- tempfile(fileext = ".toon")
 

@@ -1,5 +1,6 @@
 #include "toon_lex.h"
 #include "toon_charconv.h"
+#include "toon_number.h"
 
 #include <cerrno>
 #include <cmath>
@@ -408,6 +409,11 @@ Scalar parse_scalar(std::string_view tok, std::string& scratch) {
             }
         }
         double d = 0.0;
+        if (parse_decimal(tok.data(), tok.size(), d)) {
+            s.kind = ScalarKind::Double;
+            s.d = d;
+            return s;
+        }
         auto res = double_from_chars(tok.data(), tok.data() + tok.size(), d);
         if (res.ec == std::errc::result_out_of_range) {
             // Beyond the double range: nearest double (+-Inf or 0).

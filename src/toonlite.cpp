@@ -347,6 +347,24 @@ SEXP C_stream_rows(SEXP file, SEXP key, SEXP callback, SEXP batch_size,
     });
 }
 
+// Stream the items of a list array to an R callback in batches
+SEXP C_stream_items(SEXP file, SEXP key, SEXP callback, SEXP batch_size, SEXP strict,
+                    SEXP indent, SEXP simplify) {
+    return guarded("Error streaming TOON", [&](Warnings&) {
+        ItemStream s;
+        if (key != R_NilValue) {
+            s.has_key = true;
+            s.key = Rf_translateCharUTF8(STRING_ELT(key, 0));
+        }
+        const int bs = Rf_asInteger(batch_size);
+        s.batch_size = (bs == NA_INTEGER || bs < 1) ? 1 : static_cast<size_t>(bs);
+        s.simplify = flag_arg(simplify);
+        s.callback = callback;
+        stream_toon_items(path_arg(file), read_options(strict, indent), s);
+        return R_NilValue;
+    });
+}
+
 SEXP C_toon_peek(SEXP file, SEXP n) {
     return guarded("Error peeking TOON", [&](Warnings&) {
         const int max_lines = Rf_asInteger(n);

@@ -60,77 +60,58 @@ toon_stream_rows <- function(file, key = NULL, callback, batch_size = 10000L,
   invisible(NULL)
 }
 
-#' Stream non-tabular array items
+#' Stream array items
+#'
+#' Decodes the items of an array one batch at a time and hands each batch to
+#' `callback`, so arrays larger than memory can be processed. Items can be
+#' any TOON value; rows of a tabular array arrive as row objects (named
+#' lists). For a data.frame per batch use [toon_stream_rows()].
 #'
 #' @param file Character scalar. Path to TOON file.
-#' @param key Character scalar or NULL. If non-NULL, extract array at root\[key\].
-#' @param callback Function. Called with each batch as a list.
+#' @param key Character scalar or NULL. If NULL, the document root must be an
+#'   array. Otherwise the root must be an object and the array is read from
+#'   its field `key`.
+#' @param callback Function called with each batch: a list of up to
+#'   `batch_size` items, each decoded as by [read_toon()].
 #' @param batch_size Integer. Number of items per batch (default 1000).
-#' @param strict Logical. If TRUE (default), enforce strict TOON syntax.
-#' @param allow_comments Logical. If TRUE (default), allow # and // comments.
-#' @param allow_duplicate_keys Logical. If TRUE (default), allow duplicate keys.
-#' @param warn Logical. If TRUE (default), emit warnings.
-#' @param simplify Logical. If TRUE (default), simplify homogeneous batches.
+#' @inheritParams from_toon
+#' @param warn Currently unused: decoding items produces no warnings.
 #'
 #' @return Invisibly returns NULL.
 #'
+#' @details
+#' The rest of the document is decoded and validated as well, but only the
+#' streamed items are handed out. An error found after some batches were
+#' delivered (a declared count that does not match in strict mode, or invalid
+#' content later in the file) is raised after those callbacks ran.
+#'
 #' @examples
-#' \dontrun{
-#' # Stream array items
-#' toon_stream_items("items.toon",
-#'   callback = function(batch) {
-#'     cat("Got", length(batch), "items\n")
-#'   }
-#' )
-#' }
+#' f <- tempfile(fileext = ".toon")
+#' write_toon(list(items = list(1, "two", list(x = 3))), f)
+#' toon_stream_items(f, key = "items", batch_size = 2, callback = function(batch) {
+#'   str(batch)
+#' })
 #'
 #' @export
 toon_stream_items <- function(file, key = NULL, callback, batch_size = 1000L,
                               strict = TRUE, allow_comments = TRUE,
                               allow_duplicate_keys = TRUE, warn = TRUE,
-                              simplify = TRUE) {
+                              simplify = TRUE, indent = 2L) {
   check_string(file)
   file <- normalizePath(file, mustWork = TRUE)
+  if (!is.null(key)) check_string(key)
 
   if (!is.function(callback)) {
     stop("callback must be a function")
   }
-
-  # For now, fall back to reading entire file and streaming manually
-  # A full implementation would use incremental parsing
   warn_comments_deprecated(allow_comments)
   if (!missing(allow_duplicate_keys)) warn_decoder_duplicate_keys_deprecated()
-  data <- read_toon(file, strict = strict, simplify = simplify)
-
-  if (!is.null(key)) {
-    if (!is.list(data) || !(key %in% names(data))) {
-      stop("Key '", key, "' not found in root object")
-    }
-    data <- data[[key]]
-  }
-
-  # Accept both lists and atomic vectors (simplified arrays)
-  if (!is.list(data) && !is.atomic(data)) {
-    stop("Target must be an array (list or vector)")
-  }
-  # Convert atomic vector to list for consistent batch processing
-  if (is.atomic(data)) {
-    data <- as.list(data)
-  }
-
+  indent <- check_indent(indent)
   batch_size <- as.integer(batch_size)
-  if (batch_size < 1) batch_size <- 1L
+  if (is.na(batch_size) || batch_size < 1L) batch_size <- 1L
 
-  n <- length(data)
-  i <- 1L
-
-  while (i <= n) {
-    end <- min(i + batch_size - 1L, n)
-    batch <- data[i:end]
-    callback(batch)
-    i <- end + 1L
-  }
-
+  .Call(C_stream_items, file, key, callback, batch_size, isTRUE(strict),
+        indent, isTRUE(simplify))
   invisible(NULL)
 }
 
