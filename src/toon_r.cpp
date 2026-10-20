@@ -22,6 +22,19 @@ void unwind_cleanup(void* jmpbuf, Rboolean jump) {
     if (jump == TRUE) unwind_cleanup_jump(jmpbuf);
 }
 
+// On 64-bit MinGW, setjmp() records its frame and longjmp() then unwinds the
+// stack to it with RtlUnwindEx. On the Windows build 26100 GitHub runner that
+// unwind aborts with STATUS_BAD_STACK while crossing R_UnwindProtect() (R
+// 4.6.1, GCC 14), killing R. Nothing between the cleanup and this frame needs
+// unwinding (R's C frames and the cleanup callback), so a null frame, which
+// makes longjmp() restore the saved registers only, as it does on other
+// platforms, is enough.
+#if defined(__MINGW64__) && defined(__x86_64__)
+#define TOONLITE_SETJMP(buf) _setjmp((buf), nullptr)
+#else
+#define TOONLITE_SETJMP(buf) setjmp(buf)
+#endif
+
 // Run `fun(data)` under R_UnwindProtect. If R jumps (error, interrupt,
 // restart), control comes back here and the jump continues as a C++
 // exception; the caller's catch resumes it with R_ContinueUnwind().
@@ -29,7 +42,7 @@ SEXP unwind_protect(SEXP (*fun)(void*), void* data) {
     SEXP token = unwind_token();
     SETCAR(token, R_NilValue);
     std::jmp_buf jmpbuf;
-    if (setjmp(jmpbuf)) {
+    if (TOONLITE_SETJMP(jmpbuf)) {
         throw UnwindException{token};
     }
     return R_UnwindProtect(fun, data, unwind_cleanup, &jmpbuf, token);
