@@ -28,15 +28,6 @@ public:
     // Returns false when no more lines available
     bool next_line(std::string_view& out_line, size_t& out_line_no);
 
-    // Get current line number (1-indexed)
-    size_t current_line() const { return line_no_; }
-
-    // Check if reading from file
-    bool is_file() const { return file_.is_open(); }
-
-    // Get file path (empty if reading from string)
-    const std::string& filepath() const { return filepath_; }
-
     // Check for errors
     bool has_error() const { return has_error_; }
     const std::string& error_message() const { return error_message_; }
@@ -46,7 +37,6 @@ private:
     void handle_crlf(std::string_view& line);
 
     std::ifstream file_;
-    std::string filepath_;
     std::vector<char> buffer_;
     size_t buffer_size_;
     size_t buffer_pos_ = 0;
@@ -83,9 +73,6 @@ public:
     // Get current content
     std::string_view view() const;
     std::string str() const;
-
-    // Write to file
-    bool write_to_file(const std::string& filepath);
 
     void clear();
     size_t size() const { return data_.size(); }

@@ -74,7 +74,7 @@ std::optional<std::string> unescape_quoted_string(std::string_view text, bool st
 }
 
 BufferedReader::BufferedReader(const std::string& filepath, size_t buffer_size)
-    : filepath_(filepath), buffer_size_(buffer_size) {
+    : buffer_size_(buffer_size) {
     buffer_.resize(buffer_size_);
     file_.open(filepath, std::ios::binary);
     if (!file_.is_open()) {
@@ -254,15 +254,6 @@ std::string_view WriteBuffer::view() const {
 
 std::string WriteBuffer::str() const {
     return std::string(data_.begin(), data_.end());
-}
-
-bool WriteBuffer::write_to_file(const std::string& filepath) {
-    std::ofstream out(filepath, std::ios::binary);
-    if (!out.is_open()) {
-        return false;
-    }
-    out.write(data_.data(), data_.size());
-    return out.good();
 }
 
 void WriteBuffer::clear() {

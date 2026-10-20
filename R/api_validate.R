@@ -34,9 +34,7 @@ NULL
 #' @export
 validate_toon <- function(x, is_file = FALSE, strict = TRUE,
                           allow_comments = TRUE, allow_duplicate_keys = TRUE) {
-  if (!is.character(x) || length(x) != 1) {
-    stop("x must be a single character string")
-  }
+  check_string(x)
 
   if (is_file) {
     if (!file.exists(x)) {
@@ -124,9 +122,7 @@ assert_toon <- function(x, is_file = FALSE, strict = TRUE,
 #' @export
 format_toon <- function(x, is_file = FALSE, indent = 2L, canonical = FALSE,
                         allow_comments = TRUE) {
-  if (!is.character(x) || length(x) != 1) {
-    stop("x must be a single character string")
-  }
+  check_string(x)
 
   if (is_file) {
     x <- normalizePath(x, mustWork = TRUE)
@@ -160,9 +156,7 @@ format_toon <- function(x, is_file = FALSE, indent = 2L, canonical = FALSE,
 #'
 #' @export
 toon_peek <- function(file, n = 50L, allow_comments = TRUE) {
-  if (!is.character(file) || length(file) != 1) {
-    stop("file must be a single character string")
-  }
+  check_string(file)
   file <- normalizePath(file, mustWork = TRUE)
 
   n <- as.integer(n)
@@ -193,9 +187,7 @@ toon_peek <- function(file, n = 50L, allow_comments = TRUE) {
 #'
 #' @export
 toon_info <- function(file, allow_comments = TRUE) {
-  if (!is.character(file) || length(file) != 1) {
-    stop("file must be a single character string")
-  }
+  check_string(file)
   file <- normalizePath(file, mustWork = TRUE)
 
   .Call(C_toon_info, file, allow_comments)

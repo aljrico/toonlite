@@ -3,8 +3,10 @@
 
 #include <string>
 #include <vector>
-#include <functional>
 #include <cstddef>
+#include <fstream>
+#include <memory>
+#include <optional>
 #include "toon_errors.h"
 #include "toon_io.h"
 #include "toon_df.h"
@@ -18,9 +20,7 @@ namespace toonlite {
 struct StreamOptions {
     bool strict = true;
     bool allow_comments = true;
-    bool allow_duplicate_keys = true;
     bool warn = true;
-    bool simplify = true;
     std::string ragged_rows = "expand_warn";
     std::string n_mismatch = "warn";
     size_t max_extra_cols = SIZE_MAX;
@@ -41,7 +41,8 @@ public:
     const std::vector<Warning>& warnings() const { return warnings_; }
 
 private:
-    void process_batch();
+    void reset_batch();
+    void process_batch(SEXP callback);  // emit batch to R, then reset
     bool find_tabular_header();
     bool parse_header(std::string_view header);
     std::vector<std::string_view> split_row(std::string_view line, char delimiter);
@@ -66,22 +67,6 @@ private:
     size_t min_fields_ = SIZE_MAX;
     size_t max_fields_ = 0;
     size_t schema_expansions_ = 0;
-};
-
-// Item streaming parser (for non-tabular arrays)
-class ItemStreamer {
-public:
-    ItemStreamer(const std::string& filepath, const StreamOptions& opts);
-
-    // Stream items to R callback
-    void stream(SEXP callback);
-
-    const std::vector<Warning>& warnings() const { return warnings_; }
-
-private:
-    std::string filepath_;
-    StreamOptions opts_;
-    std::vector<Warning> warnings_;
 };
 
 // Streaming writer for tabular data

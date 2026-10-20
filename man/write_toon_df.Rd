@@ -18,7 +18,8 @@ write_toon_df(
 
 \item{file}{Character scalar. Path to output file.}
 
-\item{tabular}{Logical. If TRUE (default), write as tabular TOON array.}
+\item{tabular}{Deprecated and ignored. Data frames are always written as a
+tabular TOON array; passing anything other than TRUE gives a warning.}
 
 \item{pretty}{Logical. If TRUE (default), use multi-line formatting.}
 

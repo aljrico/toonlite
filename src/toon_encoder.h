@@ -47,7 +47,7 @@ public:
     std::string encode(SEXP x);
 
     // Encode data.frame to tabular TOON
-    std::string encode_dataframe(SEXP df, bool tabular = true);
+    std::string encode_dataframe(SEXP df);
 
 private:
     void encode_value(SEXP x, int depth);
@@ -59,7 +59,6 @@ private:
     void encode_vector(SEXP x, int depth);
     void encode_list(SEXP x, int depth);
     void encode_dataframe_tabular(SEXP df, int depth);
-    void encode_dataframe_rows(SEXP df, int depth);
 
     // Helpers
     void write_indent(int depth);

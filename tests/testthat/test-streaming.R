@@ -121,3 +121,28 @@ test_that("toon_stream_write_rows escapes control chars, writes factor levels, n
   expect_identical(result$f, "lvl")
   expect_true(is.na(result$d))
 })
+
+test_that("toon_stream_rows honours strict like read_toon_df", {
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  writeLines("[2]{x}:\n\t1\n\t2", tmp)
+
+  expect_error(read_toon_df(tmp, strict = TRUE), "Tab characters")
+  expect_error(toon_stream_rows(tmp, callback = function(b) NULL, strict = TRUE),
+               "Tab characters")
+
+  got <- NULL
+  toon_stream_rows(tmp, callback = function(b) got <<- b, strict = FALSE)
+  expect_identical(got, read_toon_df(tmp, strict = FALSE))
+})
+
+test_that("toon_stream_rows applies col_types to every batch", {
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  writeLines("[4]{x,y}:\n  1, 2\n  3, 4\n  5, 6\n  7, 8", tmp)
+
+  types <- character()
+  toon_stream_rows(tmp, batch_size = 2L, col_types = c(x = "double"),
+                   callback = function(b) types <<- c(types, typeof(b$x)))
+  expect_identical(types, c("double", "double"))
+})

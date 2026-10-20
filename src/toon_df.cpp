@@ -756,57 +756,6 @@ SEXP TabularParser::parse_file(const std::string& filepath) {
     return build_dataframe(columns_, observed_rows_);
 }
 
-SEXP TabularParser::parse_string(const char* data, size_t len) {
-    warnings_.clear();
-    current_file_.clear();
-    field_names_.clear();
-    columns_.clear();
-    declared_rows_ = 0;
-    observed_rows_ = 0;
-    min_fields_ = SIZE_MAX;
-    max_fields_ = 0;
-    schema_expansions_ = 0;
-
-    BufferedReader reader(data, len);
-
-    std::string header_line;
-    size_t header_line_no;
-
-    if (!find_tabular_array(reader, header_line, header_line_no)) {
-        throw ParseError("No tabular array found");
-    }
-
-    if (!parse_header(header_line)) {
-        throw ParseError("Invalid tabular header", header_line_no, 0, header_line, "");
-    }
-
-    parse_rows(reader, -1);
-
-    // Check warnings
-    if (declared_rows_ > 0 && observed_rows_ != declared_rows_) {
-        if (opts_.n_mismatch == "error") {
-            throw ParseError("Declared [" + std::to_string(declared_rows_) + "] but observed " +
-                std::to_string(observed_rows_) + " rows");
-        } else if (opts_.warn) {
-            warnings_.push_back(Warning("n_mismatch",
-                "Declared [" + std::to_string(declared_rows_) + "] but observed " +
-                std::to_string(observed_rows_) + " rows; using observed."));
-        }
-    }
-
-    if (min_fields_ != max_fields_ && opts_.warn) {
-        std::string msg = "Tabular rows had inconsistent field counts (min=" +
-            std::to_string(min_fields_) + ", max=" + std::to_string(max_fields_) + ").";
-        if (schema_expansions_ > 0) {
-            msg += " Schema expanded to " + std::to_string(columns_.size()) + " columns;";
-        }
-        msg += " missing values filled with NA.";
-        warnings_.push_back(Warning("ragged_rows", msg));
-    }
-
-    return build_dataframe(columns_, observed_rows_);
-}
-
 SEXP build_dataframe(std::vector<ColBuilder>& columns, size_t nrow) {
     size_t ncol = columns.size();
 

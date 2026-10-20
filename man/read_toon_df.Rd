@@ -27,7 +27,8 @@ root[key] (root must be object).}
 
 \item{allow_comments}{Logical. If TRUE (default), allow # and // comments.}
 
-\item{allow_duplicate_keys}{Logical. If TRUE (default), allow duplicate keys.}
+\item{allow_duplicate_keys}{Deprecated and ignored; it has no effect on
+tabular reads. Passing anything other than TRUE gives a warning.}
 
 \item{warn}{Logical. If TRUE (default), emit warnings for schema changes.}
 

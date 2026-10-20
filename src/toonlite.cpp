@@ -3,11 +3,10 @@
 #include <string>
 #include <string_view>
 #include <vector>
-#include <variant>
 #include <memory>
 #include <cstdint>
 #include <optional>
-#include <unordered_map>
+#include <functional>
 #include <fstream>
 #include <cmath>
 
@@ -347,13 +346,12 @@ SEXP C_validate_toon(SEXP x, SEXP is_file, SEXP strict, SEXP allow_comments, SEX
 
 // Read tabular TOON to data.frame
 SEXP C_read_toon_df(SEXP file, SEXP key, SEXP strict, SEXP allow_comments,
-                    SEXP allow_duplicate_keys, SEXP warn, SEXP col_types,
-                    SEXP ragged_rows, SEXP n_mismatch, SEXP max_extra_cols) {
+                    SEXP warn, SEXP col_types, SEXP ragged_rows, SEXP n_mismatch,
+                    SEXP max_extra_cols) {
     try {
         TabularParseOptions opts;
         opts.strict = Rf_asLogical(strict) == TRUE;
         opts.allow_comments = Rf_asLogical(allow_comments) == TRUE;
-        opts.allow_duplicate_keys = Rf_asLogical(allow_duplicate_keys) == TRUE;
         opts.warn = Rf_asLogical(warn) == TRUE;
 
         if (key != R_NilValue) {
@@ -400,7 +398,7 @@ SEXP C_read_toon_df(SEXP file, SEXP key, SEXP strict, SEXP allow_comments,
 }
 
 // Write data.frame to tabular TOON
-SEXP C_write_toon_df(SEXP df, SEXP file, SEXP tabular, SEXP pretty, SEXP indent, SEXP strict) {
+SEXP C_write_toon_df(SEXP df, SEXP file, SEXP pretty, SEXP indent, SEXP strict) {
     try {
         EncodeOptions opts;
         opts.pretty = Rf_asLogical(pretty) == TRUE;
@@ -408,7 +406,7 @@ SEXP C_write_toon_df(SEXP df, SEXP file, SEXP tabular, SEXP pretty, SEXP indent,
         opts.strict = Rf_asLogical(strict) == TRUE;
 
         Encoder encoder(opts);
-        std::string result = encoder.encode_dataframe(df, Rf_asLogical(tabular) == TRUE);
+        std::string result = encoder.encode_dataframe(df);
 
         // Write to file
         std::string filepath(CHAR(STRING_ELT(file, 0)));
@@ -431,14 +429,12 @@ SEXP C_write_toon_df(SEXP df, SEXP file, SEXP tabular, SEXP pretty, SEXP indent,
 
 // Stream tabular rows
 SEXP C_stream_rows(SEXP file, SEXP key, SEXP callback, SEXP batch_size,
-                   SEXP strict, SEXP allow_comments, SEXP allow_duplicate_keys,
-                   SEXP warn, SEXP col_types, SEXP ragged_rows, SEXP n_mismatch,
-                   SEXP max_extra_cols) {
+                   SEXP strict, SEXP allow_comments, SEXP warn, SEXP col_types,
+                   SEXP ragged_rows, SEXP n_mismatch, SEXP max_extra_cols) {
     try {
         StreamOptions opts;
         opts.strict = Rf_asLogical(strict) == TRUE;
         opts.allow_comments = Rf_asLogical(allow_comments) == TRUE;
-        opts.allow_duplicate_keys = Rf_asLogical(allow_duplicate_keys) == TRUE;
         opts.warn = Rf_asLogical(warn) == TRUE;
         opts.batch_size = static_cast<size_t>(Rf_asInteger(batch_size));
 
@@ -707,69 +703,6 @@ SEXP C_toon_info(SEXP file, SEXP allow_comments) {
         Rf_error("%s", e.formatted_message().c_str());
     } catch (const std::exception& e) {
         Rf_error("Error getting TOON info: %s", e.what());
-    }
-
-    return R_NilValue;
-}
-
-// From tabular TOON string
-SEXP C_from_toon_df(SEXP text, SEXP key, SEXP strict, SEXP allow_comments,
-                    SEXP allow_duplicate_keys, SEXP warn, SEXP col_types,
-                    SEXP ragged_rows, SEXP n_mismatch, SEXP max_extra_cols) {
-    try {
-        TabularParseOptions opts;
-        opts.strict = Rf_asLogical(strict) == TRUE;
-        opts.allow_comments = Rf_asLogical(allow_comments) == TRUE;
-        opts.allow_duplicate_keys = Rf_asLogical(allow_duplicate_keys) == TRUE;
-        opts.warn = Rf_asLogical(warn) == TRUE;
-
-        if (key != R_NilValue) {
-            opts.key = std::string(CHAR(STRING_ELT(key, 0)));
-        }
-
-        opts.ragged_rows = CHAR(STRING_ELT(ragged_rows, 0));
-        opts.n_mismatch = CHAR(STRING_ELT(n_mismatch, 0));
-
-        double max_cols = Rf_asReal(max_extra_cols);
-        opts.max_extra_cols = std::isinf(max_cols) ? SIZE_MAX : static_cast<size_t>(max_cols);
-
-        // Parse col_types
-        if (col_types != R_NilValue && Rf_xlength(col_types) > 0) {
-            SEXP ct_names = Rf_getAttrib(col_types, R_NamesSymbol);
-            for (R_xlen_t i = 0; i < Rf_xlength(col_types); i++) {
-                std::string name(CHAR(STRING_ELT(ct_names, i)));
-                std::string type_str(CHAR(STRING_ELT(col_types, i)));
-
-                ColType ctype = ColType::STRING;
-                if (type_str == "logical") ctype = ColType::LOGICAL;
-                else if (type_str == "integer") ctype = ColType::INTEGER;
-                else if (type_str == "double") ctype = ColType::DOUBLE;
-                else if (type_str == "character") ctype = ColType::STRING;
-
-                opts.col_types.push_back({name, ctype});
-            }
-        }
-
-        const char* data;
-        size_t len;
-
-        if (TYPEOF(text) == RAWSXP) {
-            data = reinterpret_cast<const char*>(RAW(text));
-            len = Rf_xlength(text);
-        } else {
-            data = CHAR(STRING_ELT(text, 0));
-            len = strlen(data);
-        }
-
-        TabularParser parser(opts);
-        SEXP result = parser.parse_string(data, len);
-        emit_warnings(parser.warnings());
-
-        return result;
-    } catch (const ParseError& e) {
-        Rf_error("%s", e.formatted_message().c_str());
-    } catch (const std::exception& e) {
-        Rf_error("Error parsing tabular TOON: %s", e.what());
     }
 
     return R_NilValue;

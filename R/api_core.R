@@ -70,9 +70,7 @@ from_toon <- function(text, strict = TRUE, simplify = TRUE,
 read_toon <- function(file, strict = TRUE, simplify = TRUE,
                       allow_comments = TRUE, allow_duplicate_keys = TRUE,
                       encoding = "UTF-8") {
-  if (!is.character(file) || length(file) != 1) {
-    stop("file must be a single character string")
-  }
+  check_string(file)
   file <- normalizePath(file, mustWork = TRUE)
 
   if (!identical(encoding, "UTF-8")) {
@@ -144,9 +142,7 @@ to_toon <- function(x, pretty = TRUE, indent = 2L, strict = TRUE,
 #'
 #' @export
 write_toon <- function(x, file, pretty = TRUE, indent = 2L, strict = TRUE) {
-  if (!is.character(file) || length(file) != 1) {
-    stop("file must be a single character string")
-  }
+  check_string(file)
 
   toon_str <- to_toon(x, pretty = pretty, indent = indent, strict = strict)
 

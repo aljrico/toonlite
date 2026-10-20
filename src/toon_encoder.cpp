@@ -356,10 +356,6 @@ void Encoder::encode_dataframe_tabular(SEXP df, int depth) {
     }
 }
 
-void Encoder::encode_dataframe_rows(SEXP df, int depth) {
-    encode_dataframe_tabular(df, depth);
-}
-
 void Encoder::encode_value(SEXP x, int depth) {
     if (x == R_NilValue) {
         encode_null();
@@ -539,13 +535,9 @@ std::string Encoder::encode(SEXP x) {
     return buf_.str();
 }
 
-std::string Encoder::encode_dataframe(SEXP df, bool tabular) {
+std::string Encoder::encode_dataframe(SEXP df) {
     buf_.clear();
-    if (tabular) {
-        encode_dataframe_tabular(df, 0);
-    } else {
-        encode_dataframe_rows(df, 0);
-    }
+    encode_dataframe_tabular(df, 0);
     return buf_.str();
 }
 

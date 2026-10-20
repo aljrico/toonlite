@@ -30,11 +30,14 @@ Return value is ignored; exceptions propagate and abort parsing.}
 
 \item{batch_size}{Integer. Number of rows per batch (default 10000).}
 
-\item{strict}{Logical. If TRUE (default), enforce strict TOON syntax.}
+\item{strict}{Logical. If TRUE (default), enforce strict TOON syntax: tabs
+in indentation are an error and quoted strings with invalid escapes are
+kept verbatim, as in \code{\link[=read_toon_df]{read_toon_df()}}.}
 
 \item{allow_comments}{Logical. If TRUE (default), allow # and // comments.}
 
-\item{allow_duplicate_keys}{Logical. If TRUE (default), allow duplicate keys.}
+\item{allow_duplicate_keys}{Deprecated and ignored; it has no effect on
+tabular reads. Passing anything other than TRUE gives a warning.}
 
 \item{warn}{Logical. If TRUE (default), emit warnings.}
 

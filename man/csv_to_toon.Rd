@@ -17,7 +17,8 @@ csv_to_toon(
 
 \item{path_toon}{Character scalar. Path to output TOON file.}
 
-\item{tabular}{Logical. If TRUE (default), write as tabular TOON array.}
+\item{tabular}{Deprecated and ignored. Data frames are always written as a
+tabular TOON array; passing anything other than TRUE gives a warning.}
 
 \item{strict}{Logical. If TRUE (default), enforce strict syntax on output.}
 

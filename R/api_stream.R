@@ -11,9 +11,12 @@ NULL
 #' @param callback Function. Called with each batch as a data.frame.
 #'   Return value is ignored; exceptions propagate and abort parsing.
 #' @param batch_size Integer. Number of rows per batch (default 10000).
-#' @param strict Logical. If TRUE (default), enforce strict TOON syntax.
+#' @param strict Logical. If TRUE (default), enforce strict TOON syntax: tabs
+#'   in indentation are an error and quoted strings with invalid escapes are
+#'   kept verbatim, as in [read_toon_df()].
 #' @param allow_comments Logical. If TRUE (default), allow # and // comments.
-#' @param allow_duplicate_keys Logical. If TRUE (default), allow duplicate keys.
+#' @param allow_duplicate_keys Deprecated and ignored; it has no effect on
+#'   tabular reads. Passing anything other than TRUE gives a warning.
 #' @param warn Logical. If TRUE (default), emit warnings.
 #' @param col_types Named character vector specifying column types.
 #' @param ragged_rows Character. How to handle rows with different field counts.
@@ -48,9 +51,7 @@ toon_stream_rows <- function(file, key = NULL, callback, batch_size = 10000L,
                              ragged_rows = c("expand_warn", "error"),
                              n_mismatch = c("warn", "error"),
                              max_extra_cols = Inf) {
-  if (!is.character(file) || length(file) != 1) {
-    stop("file must be a single character string")
-  }
+  check_string(file)
   file <- normalizePath(file, mustWork = TRUE)
 
   if (!is.function(callback)) {
@@ -62,10 +63,10 @@ toon_stream_rows <- function(file, key = NULL, callback, batch_size = 10000L,
 
   ragged_rows <- match.arg(ragged_rows)
   n_mismatch <- match.arg(n_mismatch)
+  warn_duplicate_keys_deprecated(allow_duplicate_keys)
 
   .Call(C_stream_rows, file, key, callback, batch_size, strict, allow_comments,
-        allow_duplicate_keys, warn, col_types, ragged_rows, n_mismatch,
-        max_extra_cols)
+        warn, col_types, ragged_rows, n_mismatch, max_extra_cols)
 
   invisible(NULL)
 }
@@ -99,9 +100,7 @@ toon_stream_items <- function(file, key = NULL, callback, batch_size = 1000L,
                               strict = TRUE, allow_comments = TRUE,
                               allow_duplicate_keys = TRUE, warn = TRUE,
                               simplify = TRUE) {
-  if (!is.character(file) || length(file) != 1) {
-    stop("file must be a single character string")
-  }
+  check_string(file)
   file <- normalizePath(file, mustWork = TRUE)
 
   if (!is.function(callback)) {
@@ -150,15 +149,20 @@ toon_stream_items <- function(file, key = NULL, callback, batch_size = 1000L,
 #'
 #' @param file Character scalar. Path to output file.
 #' @param schema Character vector of column names.
-#' @param row_source Function that returns next batch as data.frame, or NULL
-#'   to end.
-#' @param batch_size Integer. Hint for batch size (passed to row_source).
+#' @param row_source Function called with no arguments that returns the next
+#'   batch as a data.frame, or NULL to end. It decides how many rows each
+#'   batch has.
+#' @param batch_size Deprecated and ignored (it was never passed to
+#'   `row_source`). Supplying it gives a warning.
 #' @param indent Integer. Number of spaces for indentation (default 2).
 #'
 #' @return Invisibly returns the number of rows written.
 #'
 #' @details
-#' Writes a tabular TOON array without holding all rows in memory.
+#' Writes a tabular TOON array without holding all rows in memory. Cells are
+#' formatted exactly as [write_toon_df()] formats them, so the file reads back
+#' the same way. Non-finite doubles (`NaN`, `Inf`) are written as `null`, as
+#' with `write_toon_df(strict = FALSE)`.
 #'
 #' @examples
 #' \dontrun{
@@ -178,9 +182,7 @@ toon_stream_items <- function(file, key = NULL, callback, batch_size = 1000L,
 #' @export
 toon_stream_write_rows <- function(file, schema, row_source,
                                    batch_size = 10000L, indent = 2L) {
-  if (!is.character(file) || length(file) != 1) {
-    stop("file must be a single character string")
-  }
+  check_string(file)
   if (!is.character(schema) || length(schema) == 0) {
     stop("schema must be a non-empty character vector")
   }
@@ -188,10 +190,13 @@ toon_stream_write_rows <- function(file, schema, row_source,
     stop("row_source must be a function")
   }
 
+  if (!missing(batch_size)) {
+    warning("`batch_size` is deprecated and ignored: row_source() decides ",
+            "how many rows each batch has.")
+  }
+
   indent <- as.integer(indent)
   if (indent < 0) indent <- 0L
-  batch_size <- as.integer(batch_size)
-  if (batch_size < 1) batch_size <- 1L
 
   # Initialize writer
   writer_ptr <- .Call(C_stream_write_init, file, schema, indent)

@@ -4,7 +4,6 @@
 #include <string>
 #include <string_view>
 #include <vector>
-#include <variant>
 #include <optional>
 #include <cstdint>
 #include "toon_errors.h"
@@ -80,7 +79,6 @@ private:
 struct TabularParseOptions {
     bool strict = true;
     bool allow_comments = true;
-    bool allow_duplicate_keys = true;
     bool warn = true;
     std::string ragged_rows = "expand_warn";  // "expand_warn" or "error"
     std::string n_mismatch = "warn";          // "warn" or "error"
@@ -96,9 +94,6 @@ public:
 
     // Parse tabular TOON from file to data.frame
     SEXP parse_file(const std::string& filepath);
-
-    // Parse tabular TOON from string to data.frame
-    SEXP parse_string(const char* data, size_t len);
 
     // Get warnings accumulated during parsing
     const std::vector<Warning>& warnings() const { return warnings_; }

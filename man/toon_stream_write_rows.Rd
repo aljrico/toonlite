@@ -17,10 +17,12 @@ toon_stream_write_rows(
 
 \item{schema}{Character vector of column names.}
 
-\item{row_source}{Function that returns next batch as data.frame, or NULL
-to end.}
+\item{row_source}{Function called with no arguments that returns the next
+batch as a data.frame, or NULL to end. It decides how many rows each
+batch has.}
 
-\item{batch_size}{Integer. Hint for batch size (passed to row_source).}
+\item{batch_size}{Deprecated and ignored (it was never passed to
+\code{row_source}). Supplying it gives a warning.}
 
 \item{indent}{Integer. Number of spaces for indentation (default 2).}
 }
@@ -31,7 +33,10 @@ Invisibly returns the number of rows written.
 Stream write tabular rows
 }
 \details{
-Writes a tabular TOON array without holding all rows in memory.
+Writes a tabular TOON array without holding all rows in memory. Cells are
+formatted exactly as \code{\link[=write_toon_df]{write_toon_df()}} formats them, so the file reads back
+the same way. Non-finite doubles (\code{NaN}, \code{Inf}) are written as \code{null}, as
+with \code{write_toon_df(strict = FALSE)}.
 }
 \examples{
 \dontrun{

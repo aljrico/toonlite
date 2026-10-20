@@ -7,15 +7,6 @@
 
 namespace toonlite {
 
-// Error types
-enum class ErrorType {
-    PARSE_ERROR,
-    VALIDATION_ERROR,
-    IO_ERROR,
-    TYPE_ERROR,
-    ENCODING_ERROR
-};
-
 // Parse error with location information
 class ParseError : public std::runtime_error {
 public:
@@ -62,7 +53,6 @@ private:
 // Validation result (does not throw)
 struct ValidationResult {
     bool valid = true;
-    ErrorType error_type = ErrorType::PARSE_ERROR;
     std::string message;
     size_t line = 0;
     size_t column = 0;
@@ -70,7 +60,7 @@ struct ValidationResult {
     std::string file;
 
     static ValidationResult ok() {
-        return ValidationResult{true, ErrorType::PARSE_ERROR, "", 0, 0, "", ""};
+        return ValidationResult{true, "", 0, 0, "", ""};
     }
 
     static ValidationResult error(const std::string& msg,
@@ -78,7 +68,7 @@ struct ValidationResult {
                                    size_t col = 0,
                                    const std::string& snippet = "",
                                    const std::string& file = "") {
-        return ValidationResult{false, ErrorType::PARSE_ERROR, msg, line, col, snippet, file};
+        return ValidationResult{false, msg, line, col, snippet, file};
     }
 };
 

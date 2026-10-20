@@ -30,9 +30,7 @@ json_to_toon <- function(json, pretty = TRUE, strict = TRUE,
     stop("Install jsonlite to use JSON conversion: install.packages('jsonlite')")
   }
 
-  if (!is.character(json) || length(json) != 1) {
-    stop("json must be a single character string")
-  }
+  check_string(json)
 
   # Parse JSON to R object
   obj <- jsonlite::fromJSON(json, simplifyVector = FALSE)
@@ -66,9 +64,7 @@ toon_to_json <- function(toon, pretty = FALSE, strict = TRUE,
     stop("Install jsonlite to use JSON conversion: install.packages('jsonlite')")
   }
 
-  if (!is.character(toon) || length(toon) != 1) {
-    stop("toon must be a single character string")
-  }
+  check_string(toon)
 
   # Parse TOON to R object
   obj <- from_toon(toon, strict = strict, simplify = FALSE,
@@ -100,12 +96,8 @@ toon_to_json <- function(toon, pretty = FALSE, strict = TRUE,
 #' @export
 toon_to_csv <- function(path_toon, path_csv, key = NULL, strict = TRUE,
                         allow_comments = TRUE, warn = TRUE) {
-  if (!is.character(path_toon) || length(path_toon) != 1) {
-    stop("path_toon must be a single character string")
-  }
-  if (!is.character(path_csv) || length(path_csv) != 1) {
-    stop("path_csv must be a single character string")
-  }
+  check_string(path_toon)
+  check_string(path_csv)
 
   # Read TOON as data.frame
   df <- read_toon_df(path_toon, key = key, strict = strict,
@@ -121,7 +113,8 @@ toon_to_csv <- function(path_toon, path_csv, key = NULL, strict = TRUE,
 #'
 #' @param path_csv Character scalar. Path to input CSV file.
 #' @param path_toon Character scalar. Path to output TOON file.
-#' @param tabular Logical. If TRUE (default), write as tabular TOON array.
+#' @param tabular Deprecated and ignored. Data frames are always written as a
+#'   tabular TOON array; passing anything other than TRUE gives a warning.
 #' @param strict Logical. If TRUE (default), enforce strict syntax on output.
 #' @param col_types Named character vector specifying column types.
 #'
@@ -135,12 +128,9 @@ toon_to_csv <- function(path_toon, path_csv, key = NULL, strict = TRUE,
 #' @export
 csv_to_toon <- function(path_csv, path_toon, tabular = TRUE, strict = TRUE,
                         col_types = NULL) {
-  if (!is.character(path_csv) || length(path_csv) != 1) {
-    stop("path_csv must be a single character string")
-  }
-  if (!is.character(path_toon) || length(path_toon) != 1) {
-    stop("path_toon must be a single character string")
-  }
+  check_string(path_csv)
+  check_string(path_toon)
+  warn_tabular_deprecated(tabular)
 
   # Read CSV
   df <- read.csv(path_csv, stringsAsFactors = FALSE)
@@ -162,7 +152,7 @@ csv_to_toon <- function(path_csv, path_toon, tabular = TRUE, strict = TRUE,
   }
 
   # Write TOON
-  write_toon_df(df, path_toon, tabular = tabular, strict = strict)
+  write_toon_df(df, path_toon, strict = strict)
 
   invisible(NULL)
 }
@@ -195,12 +185,8 @@ toon_to_parquet <- function(path_toon, path_parquet, key = NULL, strict = TRUE,
     stop("Install arrow to use parquet/feather conversion: install.packages('arrow')")
   }
 
-  if (!is.character(path_toon) || length(path_toon) != 1) {
-    stop("path_toon must be a single character string")
-  }
-  if (!is.character(path_parquet) || length(path_parquet) != 1) {
-    stop("path_parquet must be a single character string")
-  }
+  check_string(path_toon)
+  check_string(path_parquet)
 
   # Read TOON as data.frame
   df <- read_toon_df(path_toon, key = key, strict = strict,
@@ -216,7 +202,8 @@ toon_to_parquet <- function(path_toon, path_parquet, key = NULL, strict = TRUE,
 #'
 #' @param path_parquet Character scalar. Path to input Parquet file.
 #' @param path_toon Character scalar. Path to output TOON file.
-#' @param tabular Logical. If TRUE (default), write as tabular TOON array.
+#' @param tabular Deprecated and ignored. Data frames are always written as a
+#'   tabular TOON array; passing anything other than TRUE gives a warning.
 #' @param strict Logical. If TRUE (default), enforce strict syntax on output.
 #'
 #' @return Invisibly returns NULL.
@@ -236,18 +223,15 @@ parquet_to_toon <- function(path_parquet, path_toon, tabular = TRUE,
     stop("Install arrow to use parquet/feather conversion: install.packages('arrow')")
   }
 
-  if (!is.character(path_parquet) || length(path_parquet) != 1) {
-    stop("path_parquet must be a single character string")
-  }
-  if (!is.character(path_toon) || length(path_toon) != 1) {
-    stop("path_toon must be a single character string")
-  }
+  check_string(path_parquet)
+  check_string(path_toon)
+  warn_tabular_deprecated(tabular)
 
   # Read Parquet
   df <- as.data.frame(arrow::read_parquet(path_parquet))
 
   # Write TOON
-  write_toon_df(df, path_toon, tabular = tabular, strict = strict)
+  write_toon_df(df, path_toon, strict = strict)
 
   invisible(NULL)
 }
@@ -278,12 +262,8 @@ toon_to_feather <- function(path_toon, path_feather, key = NULL, strict = TRUE,
     stop("Install arrow to use parquet/feather conversion: install.packages('arrow')")
   }
 
-  if (!is.character(path_toon) || length(path_toon) != 1) {
-    stop("path_toon must be a single character string")
-  }
-  if (!is.character(path_feather) || length(path_feather) != 1) {
-    stop("path_feather must be a single character string")
-  }
+  check_string(path_toon)
+  check_string(path_feather)
 
   # Read TOON as data.frame
   df <- read_toon_df(path_toon, key = key, strict = strict,
@@ -299,7 +279,8 @@ toon_to_feather <- function(path_toon, path_feather, key = NULL, strict = TRUE,
 #'
 #' @param path_feather Character scalar. Path to input Feather file.
 #' @param path_toon Character scalar. Path to output TOON file.
-#' @param tabular Logical. If TRUE (default), write as tabular TOON array.
+#' @param tabular Deprecated and ignored. Data frames are always written as a
+#'   tabular TOON array; passing anything other than TRUE gives a warning.
 #' @param strict Logical. If TRUE (default), enforce strict syntax on output.
 #'
 #' @return Invisibly returns NULL.
@@ -319,18 +300,15 @@ feather_to_toon <- function(path_feather, path_toon, tabular = TRUE,
     stop("Install arrow to use parquet/feather conversion: install.packages('arrow')")
   }
 
-  if (!is.character(path_feather) || length(path_feather) != 1) {
-    stop("path_feather must be a single character string")
-  }
-  if (!is.character(path_toon) || length(path_toon) != 1) {
-    stop("path_toon must be a single character string")
-  }
+  check_string(path_feather)
+  check_string(path_toon)
+  warn_tabular_deprecated(tabular)
 
   # Read Feather
   df <- as.data.frame(arrow::read_feather(path_feather))
 
   # Write TOON
-  write_toon_df(df, path_toon, tabular = tabular, strict = strict)
+  write_toon_df(df, path_toon, strict = strict)
 
   invisible(NULL)
 }

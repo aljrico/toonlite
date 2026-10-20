@@ -3,9 +3,8 @@
 #include <charconv>
 #include <algorithm>
 #include <cctype>
+#include <cstdio>
 #include <fstream>
-#include <sstream>
-#include <iomanip>
 
 namespace toonlite {
 
@@ -185,31 +184,13 @@ std::vector<std::string_view> RowStreamer::split_row(std::string_view line, char
     return fields;
 }
 
-void RowStreamer::process_batch() {
-    // Build data.frame from batch_columns_
-    SEXP df = build_dataframe(batch_columns_, batch_rows_);
-
-    // Reset batch
+void RowStreamer::reset_batch() {
     batch_columns_.clear();
     for (const auto& name : field_names_) {
         batch_columns_.emplace_back(name, opts_.batch_size, opts_.strict);
     }
-    batch_rows_ = 0;
 
-    (void)df; // Used by caller
-}
-
-void RowStreamer::stream(SEXP callback) {
-    if (!find_tabular_header()) {
-        throw ParseError("No tabular array found", 0, 0, "", filepath_);
-    }
-
-    // Initialize batch columns
-    for (const auto& name : field_names_) {
-        batch_columns_.emplace_back(name, opts_.batch_size, opts_.strict);
-    }
-
-    // Apply user-specified column types
+    // Apply user-specified column types (to every batch, not just the first)
     for (const auto& [name, type] : opts_.col_types) {
         for (auto& col : batch_columns_) {
             if (col.name() == name) {
@@ -218,6 +199,30 @@ void RowStreamer::stream(SEXP callback) {
             }
         }
     }
+    batch_rows_ = 0;
+}
+
+void RowStreamer::process_batch(SEXP callback) {
+    SEXP df = PROTECT(build_dataframe(batch_columns_, batch_rows_));
+
+    // Call R callback with error checking
+    SEXP call = PROTECT(Rf_lang2(callback, df));
+    int error_occurred = 0;
+    R_tryEval(call, R_GlobalEnv, &error_occurred);
+    UNPROTECT(2);
+    if (error_occurred) {
+        throw ParseError("Callback error during streaming", 0, 0, "", filepath_);
+    }
+
+    reset_batch();
+}
+
+void RowStreamer::stream(SEXP callback) {
+    if (!find_tabular_header()) {
+        throw ParseError("No tabular array found", 0, 0, "", filepath_);
+    }
+
+    reset_batch();
 
     std::string_view line;
     size_t line_no;
@@ -227,9 +232,16 @@ void RowStreamer::stream(SEXP callback) {
         // Count indentation
         size_t indent = 0;
         for (char c : line) {
-            if (c == ' ') indent++;
-            else if (c == '\t') indent++;
-            else break;
+            if (c == ' ') {
+                indent++;
+            } else if (c == '\t') {
+                if (opts_.strict) {
+                    throw ParseError("Tab characters not allowed in indentation", line_no, 0, "", filepath_);
+                }
+                indent++;
+            } else {
+                break;
+            }
         }
 
         auto content = line.substr(indent);
@@ -301,23 +313,7 @@ void RowStreamer::stream(SEXP callback) {
 
         // Emit batch if full
         if (batch_rows_ >= opts_.batch_size) {
-            SEXP df = PROTECT(build_dataframe(batch_columns_, batch_rows_));
-
-            // Call R callback with error checking
-            SEXP call = PROTECT(Rf_lang2(callback, df));
-            int error_occurred = 0;
-            R_tryEval(call, R_GlobalEnv, &error_occurred);
-            UNPROTECT(2);
-            if (error_occurred) {
-                throw ParseError("Callback error during streaming", 0, 0, "", filepath_);
-            }
-
-            // Reset batch
-            batch_columns_.clear();
-            for (const auto& name : field_names_) {
-                batch_columns_.emplace_back(name, opts_.batch_size, opts_.strict);
-            }
-            batch_rows_ = 0;
+            process_batch(callback);
         }
 
         // Check for user interrupt
@@ -329,14 +325,7 @@ void RowStreamer::stream(SEXP callback) {
 
     // Emit final batch if any rows remain
     if (batch_rows_ > 0) {
-        SEXP df = PROTECT(build_dataframe(batch_columns_, batch_rows_));
-        SEXP call = PROTECT(Rf_lang2(callback, df));
-        int error_occurred = 0;
-        R_tryEval(call, R_GlobalEnv, &error_occurred);
-        UNPROTECT(2);
-        if (error_occurred) {
-            throw ParseError("Callback error during streaming", 0, 0, "", filepath_);
-        }
+        process_batch(callback);
     }
 
     // Check row count mismatch
@@ -361,24 +350,6 @@ void RowStreamer::stream(SEXP callback) {
         msg += " missing values filled with NA.";
         warnings_.push_back(Warning("ragged_rows", msg));
     }
-}
-
-// ItemStreamer implementation
-ItemStreamer::ItemStreamer(const std::string& filepath, const StreamOptions& opts)
-    : filepath_(filepath), opts_(opts) {}
-
-void ItemStreamer::stream(SEXP callback) {
-    // Parse as general TOON and stream array items
-    // For simplicity, use the general parser
-    BufferedReader reader(filepath_);
-    if (reader.has_error()) {
-        throw ParseError(reader.error_message(), 0, 0, "", filepath_);
-    }
-
-    // This is a simplified implementation - full implementation would
-    // parse and stream items incrementally
-    // For now, throw not implemented
-    throw ParseError("Item streaming not fully implemented in this version", 0, 0, "", filepath_);
 }
 
 // StreamWriter implementation

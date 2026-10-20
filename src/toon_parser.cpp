@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <cctype>
 #include <cmath>
+#include <unordered_map>
 #include <unordered_set>
 
 namespace toonlite {
@@ -463,14 +464,6 @@ void Parser::error(const std::string& msg, size_t line, size_t col) {
     throw ParseError(msg, line, col, "", current_file_);
 }
 
-std::string Parser::get_snippet(std::string_view line, size_t col) {
-    std::string snippet(line);
-    if (snippet.length() > 60) {
-        snippet = snippet.substr(0, 57) + "...";
-    }
-    return snippet;
-}
-
 NodePtr Parser::parse_string(const std::string& text) {
     return parse_string(text.data(), text.size());
 }
@@ -604,7 +597,6 @@ NodePtr Parser::parse_value(BufferedReader& reader, int parent_indent) {
             // Dedent - save for parent
             has_peeked_ = true;
             peeked_line_ = info;
-            peeked_raw_ = line;
             return nullptr;
         }
 

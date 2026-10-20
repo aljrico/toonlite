@@ -4,11 +4,9 @@
 #include <string>
 #include <string_view>
 #include <vector>
-#include <variant>
 #include <memory>
 #include <cstdint>
 #include <optional>
-#include <unordered_map>
 #include "toon_errors.h"
 #include "toon_io.h"
 
@@ -143,7 +141,6 @@ private:
 
     // Error handling
     void error(const std::string& msg, size_t line, size_t col = 0);
-    std::string get_snippet(std::string_view line, size_t col);
 
     ParseOptions opts_;
     std::vector<Warning> warnings_;
@@ -152,7 +149,6 @@ private:
     // For peeking at next line
     bool has_peeked_ = false;
     LineInfo peeked_line_;
-    std::string_view peeked_raw_;
 };
 
 } // namespace toonlite

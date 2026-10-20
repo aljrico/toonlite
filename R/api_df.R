@@ -10,7 +10,8 @@ NULL
 #'   root\[key\] (root must be object).
 #' @param strict Logical. If TRUE (default), enforce strict TOON syntax.
 #' @param allow_comments Logical. If TRUE (default), allow # and // comments.
-#' @param allow_duplicate_keys Logical. If TRUE (default), allow duplicate keys.
+#' @param allow_duplicate_keys Deprecated and ignored; it has no effect on
+#'   tabular reads. Passing anything other than TRUE gives a warning.
 #' @param warn Logical. If TRUE (default), emit warnings for schema changes.
 #' @param col_types Named character vector specifying column types:
 #'   "logical", "integer", "double", or "character".
@@ -45,13 +46,12 @@ read_toon_df <- function(file, key = NULL, strict = TRUE, allow_comments = TRUE,
                          ragged_rows = c("expand_warn", "error"),
                          n_mismatch = c("warn", "error"),
                          max_extra_cols = Inf) {
-  if (!is.character(file) || length(file) != 1) {
-    stop("file must be a single character string")
-  }
+  check_string(file)
   file <- normalizePath(file, mustWork = TRUE)
 
   ragged_rows <- match.arg(ragged_rows)
   n_mismatch <- match.arg(n_mismatch)
+  warn_duplicate_keys_deprecated(allow_duplicate_keys)
 
   if (!is.null(col_types)) {
     if (!is.character(col_types) || is.null(names(col_types))) {
@@ -59,15 +59,16 @@ read_toon_df <- function(file, key = NULL, strict = TRUE, allow_comments = TRUE,
     }
   }
 
-  .Call(C_read_toon_df, file, key, strict, allow_comments, allow_duplicate_keys,
-        warn, col_types, ragged_rows, n_mismatch, max_extra_cols)
+  .Call(C_read_toon_df, file, key, strict, allow_comments, warn, col_types,
+        ragged_rows, n_mismatch, max_extra_cols)
 }
 
 #' Write data.frame to tabular TOON
 #'
 #' @param df A data.frame to write.
 #' @param file Character scalar. Path to output file.
-#' @param tabular Logical. If TRUE (default), write as tabular TOON array.
+#' @param tabular Deprecated and ignored. Data frames are always written as a
+#'   tabular TOON array; passing anything other than TRUE gives a warning.
 #' @param pretty Logical. If TRUE (default), use multi-line formatting.
 #' @param indent Integer. Number of spaces for indentation (default 2).
 #' @param strict Logical. If TRUE (default), reject NaN/Inf values.
@@ -86,14 +87,14 @@ write_toon_df <- function(df, file, tabular = TRUE, pretty = TRUE,
   if (!is.data.frame(df)) {
     stop("df must be a data.frame")
   }
-  if (!is.character(file) || length(file) != 1) {
-    stop("file must be a single character string")
-  }
+  check_string(file)
+
+  warn_tabular_deprecated(tabular)
 
   indent <- as.integer(indent)
   if (indent < 0) indent <- 0L
 
-  .Call(C_write_toon_df, df, file, tabular, pretty, indent, strict)
+  .Call(C_write_toon_df, df, file, pretty, indent, strict)
 
   invisible(NULL)
 }
