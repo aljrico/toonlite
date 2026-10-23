@@ -141,6 +141,46 @@ test_that("type inference promotes correctly", {
   unlink(tmp)
 })
 
+test_that("booleans mixed with numbers give a character column with a warning", {
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  writeLines(c("[4]{a,b,c,n}:",
+               "  true,true,1,1",
+               "  1.5,null,2.5,2.5",
+               "  null,1,false,3",
+               "  false,false,true,4"), tmp)
+  expect_warning(
+    expect_warning(
+      expect_warning(df <- read_toon_df(tmp), "Column 'a' has mixed types \\(booleans and numbers\\), promoting to character"),
+      "Column 'b' has mixed types"),
+    "Column 'c' has mixed types")
+  expect_identical(df$a, c("true", "1.5", NA, "false"))
+  expect_identical(df$b, c("true", NA, "1", "false"))
+  expect_identical(df$c, c("1", "2.5", "false", "true"))
+  # Integers mixed with doubles are still double, silently
+  expect_identical(df$n, c(1, 2.5, 3, 4))
+  expect_silent(df2 <- read_toon_df(tmp, warn = FALSE))
+  expect_identical(df2, df)
+  # A forced type still converts
+  expect_silent(df3 <- read_toon_df(tmp, col_types = c(a = "double"), warn = FALSE))
+  expect_identical(df3$a, c(1, 1.5, NA, 0))
+  # The streaming reader types each batch the same way
+  got <- list()
+  w <- character()
+  withCallingHandlers(
+    toon_stream_rows(tmp, batch_size = 10L, callback = function(b) got[[length(got) + 1]] <<- b),
+    warning = function(c) {
+      w <<- c(w, conditionMessage(c))
+      invokeRestart("muffleWarning")
+    })
+  expect_identical(got[[1]], df)
+  expect_match(w, "Column '[abc]' has mixed types", all = TRUE)
+  expect_length(w, 3L)
+  # read_toon() keeps such arrays as lists rather than coercing
+  expect_identical(from_toon("[2]: true,1.5"), list(TRUE, 1.5))
+  expect_identical(from_toon("[2]: 1,2.5"), c(1, 2.5))
+})
+
 test_that("read_toon_df reads INT32_MIN as double, not NA", {
   tmp <- tempfile(fileext = ".toon")
   on.exit(unlink(tmp))

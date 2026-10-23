@@ -7,8 +7,11 @@ NULL
 #'
 #' Reads a tabular array (`[N]{fields}:` followed by one row per line) into a
 #' data.frame, without building the intermediate list that [read_toon()]
-#' returns. Column types are inferred from the values and only widen: logical,
-#' integer, double, character. Nested field groups (`{id,customer{name}}`)
+#' returns. Column types are inferred from the values: integers mixed with
+#' doubles give a double column, and anything else mixed (strings with
+#' numbers, booleans with numbers) a character column holding the values'
+#' canonical TOON text (`"true"`, `"1.5"`). Booleans mixed with numbers also
+#' warn. Nested field groups (`{id,customer{name}}`)
 #' become columns named by their dotted path (`customer.name`).
 #'
 #' @param file Character scalar. Path to TOON file.
@@ -24,7 +27,8 @@ NULL
 #' @param allow_duplicate_keys Deprecated and ignored; it has no effect on
 #'   tabular reads. Passing anything other than TRUE gives a warning.
 #' @param warn Logical. If TRUE (default), emit warnings for recoveries such
-#'   as a row count mismatch accepted under `n_mismatch = "warn"`.
+#'   as a row count mismatch accepted under `n_mismatch = "warn"`, and for
+#'   columns that mix booleans and numbers.
 #' @param col_types Named character vector specifying column types:
 #'   "logical", "integer", "double", or "character". A "character" column keeps
 #'   unquoted values exactly as written.

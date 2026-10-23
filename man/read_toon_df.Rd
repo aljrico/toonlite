@@ -37,7 +37,8 @@ of TOON and are always skipped; passing anything other than TRUE warns.}
 tabular reads. Passing anything other than TRUE gives a warning.}
 
 \item{warn}{Logical. If TRUE (default), emit warnings for recoveries such
-as a row count mismatch accepted under \code{n_mismatch = "warn"}.}
+as a row count mismatch accepted under \code{n_mismatch = "warn"}, and for
+columns that mix booleans and numbers.}
 
 \item{col_types}{Named character vector specifying column types:
 "logical", "integer", "double", or "character". A "character" column keeps
@@ -70,8 +71,11 @@ A base data.frame.
 \description{
 Reads a tabular array (\verb{[N]\{fields\}:} followed by one row per line) into a
 data.frame, without building the intermediate list that \code{\link[=read_toon]{read_toon()}}
-returns. Column types are inferred from the values and only widen: logical,
-integer, double, character. Nested field groups (\verb{\{id,customer\{name\}\}})
+returns. Column types are inferred from the values: integers mixed with
+doubles give a double column, and anything else mixed (strings with
+numbers, booleans with numbers) a character column holding the values'
+canonical TOON text (\code{"true"}, \code{"1.5"}). Booleans mixed with numbers also
+warn. Nested field groups (\verb{\{id,customer\{name\}\}})
 become columns named by their dotted path (\code{customer.name}).
 }
 \examples{

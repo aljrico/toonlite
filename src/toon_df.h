@@ -18,14 +18,17 @@ namespace toonlite {
 enum class ColType { UNKNOWN, LOGICAL, INTEGER, DOUBLE, STRING };
 
 // Builds one data.frame column from cell tokens. The type is inferred from
-// the values and only ever widens: logical -> integer -> double ->
-// character. Numbers and booleans that end up in a character column are
-// written in canonical TOON form.
+// the values and only ever widens: logical -> character, integer -> double
+// -> character. Booleans mixed with numbers give character. Numbers and
+// booleans that end up in a character column are written in canonical TOON
+// form.
 class ColBuilder {
 public:
     explicit ColBuilder(std::string name, ColType forced = ColType::UNKNOWN);
 
     const std::string& name() const { return name_; }
+    // Whether booleans and numbers met in this column (kept across reset()).
+    bool mixed() const { return mixed_; }
     size_t size() const { return n_; }
 
     // Parse a trimmed cell token and append it. `scratch` holds decoded
@@ -53,12 +56,14 @@ private:
     void promote(ColType t);
     void push_string(std::string_view s);
     void push_text_of_number(const Scalar& s);
+    void mix_bools_and_numbers();
 
     std::string name_;
     ColType forced_;
     ColType type_;
     size_t n_ = 0;
     size_t reserve_ = 0;
+    bool mixed_ = false;
     std::vector<int> ints_;     // LOGICAL and INTEGER (NA_INTEGER == NA_LOGICAL)
     std::vector<double> dbls_;  // NA_REAL for missing
     std::vector<StrRef> strs_;  // off == kNA for missing

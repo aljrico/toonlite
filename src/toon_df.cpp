@@ -122,6 +122,13 @@ void ColBuilder::promote(ColType t) {
     type_ = t;
 }
 
+// Booleans and numbers in one column: neither converts to the other without
+// losing what the cells said, so the column becomes character.
+void ColBuilder::mix_bools_and_numbers() {
+    promote(ColType::STRING);
+    mixed_ = true;
+}
+
 void ColBuilder::push_string(std::string_view s) {
     strs_.push_back(StrRef{pool_.size(), s.size()});
     pool_.append(s.data(), s.size());
@@ -169,6 +176,10 @@ void ColBuilder::push(std::string_view token, std::string& scratch) {
     switch (s.kind) {
         case ScalarKind::Bool:
             if (type_ == ColType::UNKNOWN) set_type(ColType::LOGICAL);
+            if (forced_ == ColType::UNKNOWN &&
+                (type_ == ColType::INTEGER || type_ == ColType::DOUBLE)) {
+                mix_bools_and_numbers();
+            }
             switch (type_) {
                 case ColType::LOGICAL:
                 case ColType::INTEGER: ints_.push_back(s.b ? 1 : 0); n_++; break;
@@ -177,6 +188,7 @@ void ColBuilder::push(std::string_view token, std::string& scratch) {
             }
             break;
         case ScalarKind::Int:
+            if (forced_ == ColType::UNKNOWN && type_ == ColType::LOGICAL) mix_bools_and_numbers();
             if (type_ == ColType::UNKNOWN || type_ == ColType::LOGICAL) promote(ColType::INTEGER);
             switch (type_) {
                 case ColType::INTEGER: ints_.push_back(s.i); n_++; break;
@@ -185,6 +197,7 @@ void ColBuilder::push(std::string_view token, std::string& scratch) {
             }
             break;
         case ScalarKind::Double:
+            if (forced_ == ColType::UNKNOWN && type_ == ColType::LOGICAL) mix_bools_and_numbers();
             if (type_ != ColType::STRING) {
                 promote(ColType::DOUBLE);
                 dbls_.push_back(s.d);
@@ -473,6 +486,14 @@ SEXP TabularReader::take_batch() {
 }
 
 void TabularReader::finish(std::vector<std::string>& warnings) {
+    if (opts_.warn) {
+        for (const ColBuilder& c : cols_) {
+            if (c.mixed()) {
+                warnings.push_back("Column '" + c.name() +
+                                   "' has mixed types (booleans and numbers), promoting to character");
+            }
+        }
+    }
     if (!empty_table_) {
         if (!header_.count_matches(total_rows_)) {
             const std::string msg = count_mismatch_message(header_, total_rows_, "row");

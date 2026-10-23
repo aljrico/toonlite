@@ -82,6 +82,10 @@ Deprecated arguments are ignored and warn; the 0.1.1 deprecations still warn.
 
 ## Bug fixes
 
+* `read_toon_df()` and `toon_stream_rows()` read a column mixing booleans
+  and numbers (`true`, `1.5`) as character (`"true"`, `"1.5"`) with a
+  warning, instead of silently turning the booleans into 1 and 0.
+  `read_toon()` keeps such arrays as lists, as before.
 * `warn` in `toon_stream_items()` did nothing. It now controls the
   non-strict count mismatch warnings, as in `toon_stream_rows()`; they are
   given after the last batch.

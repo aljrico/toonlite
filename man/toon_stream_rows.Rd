@@ -44,7 +44,8 @@ of TOON and are always skipped; passing anything other than TRUE warns.}
 tabular reads. Passing anything other than TRUE gives a warning.}
 
 \item{warn}{Logical. If TRUE (default), emit warnings for recoveries such
-as a row count mismatch accepted under \code{n_mismatch = "warn"}.}
+as a row count mismatch accepted under \code{n_mismatch = "warn"}, and for
+columns that mix booleans and numbers.}
 
 \item{col_types}{Named character vector specifying column types:
 "logical", "integer", "double", or "character". A "character" column keeps
