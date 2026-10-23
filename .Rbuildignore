@@ -10,3 +10,4 @@
 ^.*\.Rcheck$
 ^inst/hex$
 ^\.DS_Store$
+^bench$

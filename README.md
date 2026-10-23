@@ -5,15 +5,13 @@
 [![R-CMD-check](https://github.com/aljrico/toonlite/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/aljrico/toonlite/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-**Fast, minimal-dependency R interface for [TOON](https://toonformat.dev/) data** — read, write, validate, stream, and convert with a C++ backend.
+Read, write, validate, stream and convert [TOON](https://toonformat.dev/)
+data in R, with a C++ backend and no required dependencies.
 
-TOON is a compact, human-readable serialization format designed for passing structured data to LLMs with significantly reduced token usage.
-
-## Why TOON?
-
-JSON is verbose. YAML is ambiguous. CSV can't nest. TOON gives you readability, explicit types, nested structures, and comments, with significantly fewer tokens.
-
-TOON is particularly useful for LLM payloads, structured logs, and large tabular datasets where you want both readability and performance.
+TOON is a compact, human-readable format for passing structured data to LLMs.
+Like CSV, a uniform array declares its fields once; like JSON, it nests.
+Whether that saves tokens depends on the shape of the data: see
+[Benchmarks](#benchmarks).
 
 ## Installation
 
@@ -166,6 +164,52 @@ port: 8080
 ```
 
 For the full format specification, see [toonformat.dev](https://toonformat.dev/reference/spec.html).
+
+## Benchmarks
+
+Apple M4 Pro, 48 GB RAM, macOS 27, R 4.5.1, 23 October 2026. toonlite
+0.2.0, toon 0.0.1 (the other TOON package on CRAN), jsonlite 2.0.0,
+data.table 1.17.8. Medians from `bench::mark()`; peak memory is resident
+set size above a fresh R session. Script and full results:
+[`bench/`](https://github.com/aljrico/toonlite/blob/main/bench/results.md).
+
+A 1,000,000-row data frame (int, double, character and logical columns,
+5% NA):
+
+| Format | Write | Read | Read peak mem | File | Reads back exactly |
+| --- | --- | --- | --- | --- | --- |
+| toonlite | 196 ms | 300 ms | 115 MB | 51.3 MB | yes |
+| toon | 95 s | no reader | - | 51.5 MB | doubles to 15 digits |
+| jsonlite | 2.60 s | 3.21 s | 1617 MB | 92.4 MB | doubles to 15 digits |
+| data.table (`fwrite`/`fread`) | 60 ms | 74 ms | 96 MB | 47.2 MB | doubles to 15 digits |
+| base (`write.csv`/`read.csv`) | 1.54 s | 1.55 s | 299 MB | 49.2 MB | doubles to 15 digits |
+
+<img src="man/figures/bench-tabular.png" alt="Write and read times for a 1,000,000-row data frame" width="640" />
+
+100,000 nested records (`{id, user: {name, age}, tags: [0-3 strings], score}`):
+
+| Format | Write | Read | File |
+| --- | --- | --- | --- |
+| toonlite | 79 ms | 105 ms | 9.8 MB |
+| jsonlite | 13.2 s | 143 ms | 8.4 MB |
+
+toon 0.0.1 cannot write these: it errors on the empty tag vectors, and
+without them its output does not decode to the input.
+
+Tokens (o200k_base) for 1,000 rows or records:
+
+| Data | TOON | JSON (compact) | CSV |
+| --- | --- | --- | --- |
+| Table | 22,240 | 32,354 | 20,155 |
+| Nested records | 38,079 | 27,673 | - |
+
+TOON beats JSON on tables and loses to CSV. On nested records that are not
+uniform, the indentation costs more than JSON's quotes and braces.
+
+Streaming keeps memory flat: `toon_stream_rows()` reads the 1,000,000-row
+file in batches of 10,000 with a 48 MB peak (131 MB for `read_toon_df()`)
+in the same time, and `toon_stream_items()` reads the 100,000 records with
+a 30 MB peak (167 MB for `read_toon()`).
 
 ## License
 
