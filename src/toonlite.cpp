@@ -352,8 +352,8 @@ SEXP C_stream_rows(SEXP file, SEXP key, SEXP callback, SEXP batch_size,
 
 // Stream the items of a list array to an R callback in batches
 SEXP C_stream_items(SEXP file, SEXP key, SEXP callback, SEXP batch_size, SEXP strict,
-                    SEXP indent, SEXP simplify) {
-    return guarded("Error streaming TOON", [&](Warnings&) {
+                    SEXP indent, SEXP warn, SEXP simplify) {
+    return guarded("Error streaming TOON", [&](Warnings& w) {
         ItemStream s;
         if (key != R_NilValue) {
             s.has_key = true;
@@ -363,7 +363,9 @@ SEXP C_stream_items(SEXP file, SEXP key, SEXP callback, SEXP batch_size, SEXP st
         s.batch_size = (bs == NA_INTEGER || bs < 1) ? 1 : static_cast<size_t>(bs);
         s.simplify = flag_arg(simplify);
         s.callback = callback;
-        stream_toon_items(path_arg(file), read_options(strict, indent), s);
+        ReadOptions opts = read_options(strict, indent);
+        if (flag_arg(warn)) opts.warnings = &w;
+        stream_toon_items(path_arg(file), opts, s);
         return R_NilValue;
     });
 }

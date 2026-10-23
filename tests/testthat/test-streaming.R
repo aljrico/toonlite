@@ -88,8 +88,10 @@ test_that("toon_stream_items reports a wrong target", {
 test_that("toon_stream_items validates the whole document", {
   # A small array is checked before its only batch is delivered
   expect_error(collect_items(c("x[3]:", "  - 1", "  - 2"), key = "x"), "Declared 3 list items")
-  expect_identical(collect_items(c("x[3]:", "  - 1", "  - 2"), key = "x", strict = FALSE),
-                   list(list(1L, 2L)))
+  expect_warning(out <- collect_items(c("x[3]:", "  - 1", "  - 2"), key = "x",
+                                      strict = FALSE),
+                 "Declared 3 list items but found 2")
+  expect_identical(out, list(list(1L, 2L)))
   # Content after the target is decoded too
   calls <- 0L
   tmp <- tempfile(fileext = ".toon")
@@ -304,4 +306,19 @@ test_that("toon_stream_write_rows reorders columns by schema and supports delimi
   expect_identical(readLines(tmp, warn = FALSE),
                    c('[2|]{a|"b c"}:', '  1|"x|y"', "  2|z"))
   expect_identical(read_toon_df(tmp)[["b c"]], c("x|y", "z"))
+})
+
+test_that("toon_stream_items warns about count mismatches unless warn = FALSE", {
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  writeLines(c("[3]{x}:", "  1", "  2"), tmp)
+  calls <- 0L
+  expect_warning(toon_stream_items(tmp, strict = FALSE, batch_size = 1L,
+                                   callback = function(b) calls <<- calls + 1L),
+                 "Declared 3 rows but found 2")
+  # The warning comes after every batch was delivered
+  expect_identical(calls, 2L)
+  expect_silent(toon_stream_items(tmp, strict = FALSE, warn = FALSE,
+                                  callback = function(b) NULL))
+  expect_error(toon_stream_items(tmp, callback = function(b) NULL), "Declared 3 rows")
 })

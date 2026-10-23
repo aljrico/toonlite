@@ -43,7 +43,9 @@ of TOON and are always skipped; passing anything other than TRUE warns.}
 error when \code{strict = TRUE} and resolve last-write-wins when
 \code{strict = FALSE}, as the spec requires. Supplying it warns.}
 
-\item{warn}{Currently unused: decoding items produces no warnings.}
+\item{warn}{Logical. If TRUE (default), warn when \code{strict = FALSE}
+accepts a declared length that does not match the items found, as
+\code{\link[=read_toon]{read_toon()}} does. Warnings are given after the last batch.}
 
 \item{simplify}{Logical. If TRUE (default), arrays whose elements are all
 primitives of one type become atomic vectors (\code{null} becomes \code{NA};

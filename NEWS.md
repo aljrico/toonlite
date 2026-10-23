@@ -82,6 +82,9 @@ Deprecated arguments are ignored and warn; the 0.1.1 deprecations still warn.
 
 ## Bug fixes
 
+* `warn` in `toon_stream_items()` did nothing. It now controls the
+  non-strict count mismatch warnings, as in `toon_stream_rows()`; they are
+  given after the last batch.
 * Writers stop with an error beyond 1000 levels of nesting, the readers'
   limit, instead of writing documents that cannot be read back (they
   allowed 10000 levels).

@@ -75,7 +75,9 @@ toon_stream_rows <- function(file, key = NULL, callback, batch_size = 10000L,
 #'   `batch_size` items, each decoded as by [read_toon()].
 #' @param batch_size Integer. Number of items per batch (default 1000).
 #' @inheritParams from_toon
-#' @param warn Currently unused: decoding items produces no warnings.
+#' @param warn Logical. If TRUE (default), warn when `strict = FALSE`
+#'   accepts a declared length that does not match the items found, as
+#'   [read_toon()] does. Warnings are given after the last batch.
 #'
 #' @return Invisibly returns NULL.
 #'
@@ -111,7 +113,7 @@ toon_stream_items <- function(file, key = NULL, callback, batch_size = 1000L,
   if (is.na(batch_size) || batch_size < 1L) batch_size <- 1L
 
   .Call(C_stream_items, file, key, callback, batch_size, isTRUE(strict),
-        indent, isTRUE(simplify))
+        indent, isTRUE(warn), isTRUE(simplify))
   invisible(NULL)
 }
 
