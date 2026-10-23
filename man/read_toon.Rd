@@ -46,6 +46,10 @@ R object representing the parsed TOON data; see \code{\link[=from_toon]{from_too
 \description{
 Read TOON from file
 }
+\details{
+With \code{strict = FALSE}, a declared length that does not match the items
+found is accepted with a warning, as in \code{\link[=read_toon_df]{read_toon_df()}}.
+}
 \examples{
 f <- tempfile(fileext = ".toon")
 write_toon(list(a = 1, b = c("x", "y")), f)

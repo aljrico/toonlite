@@ -60,7 +60,36 @@ test_that("keyed tables decode to objects of row objects", {
 test_that("declared counts are enforced only in strict mode", {
   toon <- "[5]:\n  - 1\n  - 2\n  - 3"
   expect_error(from_toon(toon), "Declared 5 list items but found 3")
-  expect_silent(out <- from_toon(toon, strict = FALSE))
+  expect_warning(out <- from_toon(toon, strict = FALSE),
+                 "Line 1: Declared 5 list items but found 3; using the list items found")
   expect_identical(out, 1:3)
-  expect_identical(from_toon("x[1]: a,b", strict = FALSE), list(x = c("a", "b")))
+  expect_warning(out <- from_toon("x[1]: a,b", strict = FALSE), "Declared 1 value but found 2")
+  expect_identical(out, list(x = c("a", "b")))
+})
+
+test_that("non-strict count mismatches warn in read_toon() like read_toon_df()", {
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  writeLines(c("[3]{x}:", "  1", "  2"), tmp)
+  expect_warning(df <- read_toon_df(tmp, strict = FALSE), "Declared 3 rows but found 2")
+  expect_warning(out <- read_toon(tmp, strict = FALSE), "Declared 3 rows but found 2")
+  expect_identical(out, list(list(x = 1L), list(x = 2L)))
+  expect_warning(from_toon("m[1:]{x}:\n  a: 1\n  b: 2", strict = FALSE),
+                 "Declared 1 entry but found 2; using the entries found")
+  # Matching counts and strict errors give no warning
+  expect_silent(from_toon("[2]: 1,2", strict = FALSE))
+  expect_error(read_toon(tmp), "Declared 3 rows but found 2")
+})
+
+test_that("only the first five count mismatches are reported", {
+  toon <- paste0("a", 1:8, "[2]: 1", collapse = "\n")
+  w <- character()
+  out <- withCallingHandlers(from_toon(toon, strict = FALSE), warning = function(c) {
+    w <<- c(w, conditionMessage(c))
+    invokeRestart("muffleWarning")
+  })
+  expect_length(out, 8L)
+  expect_length(w, 6L)
+  expect_match(w[5], "^Line 5: Declared 2 values")
+  expect_match(w[6], "More declared lengths do not match")
 })

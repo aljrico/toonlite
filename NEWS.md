@@ -32,7 +32,8 @@ strict mode:
 * Duplicate keys are an error (they used to warn, last one wins). With
   `strict = FALSE` the last one wins silently, keeping the first position.
 * Declared lengths must match the items, rows or values found; mismatches
-  used to warn. With `strict = FALSE` they are accepted silently.
+  used to warn. With `strict = FALSE` they are accepted with a warning
+  (the first five per document), in `read_toon()` as in `read_toon_df()`.
 * Blank lines inside arrays, tabs or uneven indentation, and lines indented
   more than one level deeper than their parent are errors. `strict = FALSE`
   applies the spec's five recoveries instead.

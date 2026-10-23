@@ -237,8 +237,9 @@ static void finalize_stream_writer(SEXP p) {
 extern "C" {
 
 SEXP C_from_toon(SEXP text, SEXP strict, SEXP simplify, SEXP indent) {
-    return guarded("Error parsing TOON", [&](Warnings&) {
-        const ReadOptions opts = read_options(strict, indent);
+    return guarded("Error parsing TOON", [&](Warnings& w) {
+        ReadOptions opts = read_options(strict, indent);
+        opts.warnings = &w;
         Document doc;
         if (TYPEOF(text) == RAWSXP) {
             doc = parse_toon(reinterpret_cast<const char*>(RAW(text)),
@@ -252,8 +253,10 @@ SEXP C_from_toon(SEXP text, SEXP strict, SEXP simplify, SEXP indent) {
 }
 
 SEXP C_read_toon(SEXP file, SEXP strict, SEXP simplify, SEXP indent) {
-    return guarded("Error reading TOON file", [&](Warnings&) {
-        const Document doc = parse_toon_file(path_arg(file), read_options(strict, indent));
+    return guarded("Error reading TOON file", [&](Warnings& w) {
+        ReadOptions opts = read_options(strict, indent);
+        opts.warnings = &w;
+        const Document doc = parse_toon_file(path_arg(file), opts);
         return document_to_r(doc, flag_arg(simplify));
     });
 }

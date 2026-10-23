@@ -35,6 +35,9 @@ constexpr size_t kMaxNesting = 1000;
 struct ReadOptions {
     bool strict = true;
     int indent = 2;  // indentSize
+    // Where the decoder reports recoveries in non-strict mode (declared
+    // lengths that do not match); nullptr reports nothing.
+    std::vector<std::string>* warnings = nullptr;
 };
 
 // A lexical error without location. Readers turn it into a ParseError that

@@ -40,6 +40,9 @@ NULL
 #' Nesting deeper than 1000 levels is an error. Strings containing NUL
 #' (`\u0000`) cannot be represented in R and are an error.
 #'
+#' With `strict = FALSE`, a declared length that does not match the items
+#' found is accepted with a warning (the first five are reported).
+#'
 #' @examples
 #' from_toon("name: Alice\nage: 30")
 #'
@@ -77,6 +80,10 @@ from_toon <- function(text, strict = TRUE, simplify = TRUE,
 #' @param encoding Character. File encoding (default "UTF-8").
 #'
 #' @return R object representing the parsed TOON data; see [from_toon()].
+#'
+#' @details
+#' With `strict = FALSE`, a declared length that does not match the items
+#' found is accepted with a warning, as in [read_toon_df()].
 #'
 #' @examples
 #' f <- tempfile(fileext = ".toon")

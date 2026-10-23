@@ -24,7 +24,15 @@ run_decode_case <- function(tc) {
                  info = tc$name)
     return(invisible())
   }
-  out <- do.call(from_toon, c(list(tc$input), args))
+  # Non-strict fixtures accept count mismatches; toonlite also warns.
+  out <- withCallingHandlers(
+    do.call(from_toon, c(list(tc$input), args)),
+    warning = function(w) {
+      if (isFALSE(args$strict) && grepl("Declared ", conditionMessage(w))) {
+        invokeRestart("muffleWarning")
+      }
+    }
+  )
   ok <- json_equal(out, tc$expected)
   expect_true(ok, label = paste0(
     "from_toon() for '", tc$name, "'\n  got:      ", json_show(out),

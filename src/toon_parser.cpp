@@ -226,7 +226,7 @@ private:
 class Parser {
 public:
     Parser(BufferedReader& src, const ReadOptions& opts, std::string file)
-        : lines_(src, opts, std::move(file)), strict_(opts.strict) {}
+        : lines_(src, opts, std::move(file)), strict_(opts.strict), warnings_(opts.warnings) {}
 
     Document parse() {
         try {
@@ -260,6 +260,29 @@ private:
     void at(const Line& L) {
         at_no_ = L.no;
         at_text_ = L.content;
+    }
+
+    // A declared length that does not match the `n` items found: an error in
+    // strict mode (at `line`, or at the current line when 0), otherwise a
+    // warning. Only the first few mismatches are reported one by one.
+    void check_count(const Header& h, size_t n, const char* noun, size_t line = 0) {
+        if (h.count_matches(n)) return;
+        std::string msg = count_mismatch_message(h, n, noun);
+        if (strict_) {
+            if (line == 0) throw LexError(msg);
+            lines_.fail(msg, line);
+        }
+        if (!warnings_) return;
+        constexpr size_t kMaxCountWarnings = 5;
+        if (++mismatches_ > kMaxCountWarnings) {
+            if (mismatches_ == kMaxCountWarnings + 1) {
+                warnings_->push_back("More declared lengths do not match; not reporting them.");
+            }
+            return;
+        }
+        const std::string plural = std::strcmp(noun, "entry") == 0 ? "entries" : std::string(noun) + "s";
+        warnings_->push_back("Line " + std::to_string(line ? line : at_no_) + ": " + msg +
+                             "; using the " + plural + " found.");
     }
 
     void enter() {
@@ -498,9 +521,7 @@ private:
 
     uint32_t inline_array(const Header& h, bool streamed) {
         split_delimited(h.inline_values, h.delim, cells_);
-        if (strict_ && !h.count_matches(cells_.size())) {
-            throw LexError(count_mismatch_message(h, cells_.size(), "value"));
-        }
+        check_count(h, cells_.size(), "value");
         const size_t mark = stack_.size();
         for (const std::string_view tok : cells_) {
             Kid k;
@@ -553,9 +574,7 @@ private:
             if (started) lines_.span_ended();
             leave();
         }
-        if (strict_ && !h.count_matches(n)) {
-            lines_.fail(count_mismatch_message(h, n, "list item"), h.line_no);
-        }
+        check_count(h, n, "list item", h.line_no);
         if (streamed) flush_items();
         return finish(NodeKind::Array, mark);
     }
@@ -629,9 +648,7 @@ private:
                 pending = 0;
             }
         }
-        if (strict_ && !h.count_matches(n)) {
-            lines_.fail(count_mismatch_message(h, n, h.keyed ? "entry" : "row"), h.line_no);
-        }
+        check_count(h, n, h.keyed ? "entry" : "row", h.line_no);
         if (streamed) {
             flush_rows(t, pending);
             n = 0;
@@ -699,6 +716,8 @@ private:
 
     LineReader lines_;
     bool strict_;
+    std::vector<std::string>* warnings_;
+    size_t mismatches_ = 0;
     const ItemStream* stream_ = nullptr;
     bool found_ = false;
     std::array<size_t, 5> marks_{};

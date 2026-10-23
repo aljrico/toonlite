@@ -55,6 +55,9 @@ Decodes a TOON document (spec v4.4) into R values.
 \details{
 Nesting deeper than 1000 levels is an error. Strings containing NUL
 (\verb{\\u0000}) cannot be represented in R and are an error.
+
+With \code{strict = FALSE}, a declared length that does not match the items
+found is accepted with a warning (the first five are reported).
 }
 \examples{
 from_toon("name: Alice\nage: 30")
