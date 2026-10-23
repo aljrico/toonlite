@@ -11,3 +11,4 @@
 ^inst/hex$
 ^\.DS_Store$
 ^bench$
+^cran-comments\.md$
