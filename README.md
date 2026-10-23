@@ -8,10 +8,53 @@
 Read, write, validate, stream and convert [TOON](https://toonformat.dev/)
 data in R, with a C++ backend and no required dependencies.
 
-TOON is a compact, human-readable format for passing structured data to LLMs.
-Like CSV, a uniform array declares its fields once; like JSON, it nests.
-Whether that saves tokens depends on the shape of the data: see
-[Benchmarks](#benchmarks).
+## Why TOON?
+
+TOON is a text format for handing structured data to an LLM. It nests like
+JSON, but an array of same-shaped records is written as a table: the field
+names once, then one row per record.
+
+```
+results[3]{id,user{name,country},plan}:
+  1,Ada Ng,ES,free
+  2,Eli Smith,DE,pro
+  3,Ada Ruiz,US,free
+```
+
+That is where it pays off, and only there. Tokens (o200k_base) for 200
+records, from [`bench/shapes.R`](bench/shapes.R):
+
+| Data | TOON | JSON (compact) | TOON vs JSON |
+| --- | --- | --- | --- |
+| API response, flat records | 3,712 | 6,388 | -42% |
+| API response, records with a nested object | 3,100 | 5,577 | -44% |
+| Records with variable-length arrays | 4,114 | 3,171 | +30% |
+| Small config object | 61 | 52 | +17% |
+
+Use TOON when your data is JSON-shaped and mostly arrays of uniform records:
+API responses, query results, event logs. That is a lot of what goes into a
+prompt. If the data is one flat table, CSV is about 10% smaller still. If the
+records vary in shape, or it is a small config, stay with JSON.
+
+Because arrays declare their length and fields (`[3]{...}`), a truncated or
+mangled document is caught when it is read back, not silently accepted.
+
+## Why toonlite?
+
+If you have chosen TOON, this is the package for it in R:
+
+* **Correct.** Implements [TOON spec v4.4.0](https://github.com/toon-format/spec)
+  and passes all 564 official conformance fixtures, so it reads what other
+  TOON implementations write and the other way round.
+* **Reads and writes.** The other TOON package on CRAN, `toon`, only writes,
+  and fails on nested data.
+* **Fast.** A 1,000,000-row data frame writes in 0.2 s and reads in 0.3 s:
+  about 10x jsonlite and 500x `toon`. See [Benchmarks](#benchmarks).
+* **Exact.** Doubles read back bit for bit.
+* **Streams.** `toon_stream_rows()` and `toon_stream_items()` read large
+  files in batches with flat memory.
+* **Light.** No required dependencies. Converts to and from JSON, CSV,
+  Parquet and Feather.
 
 ## Installation
 
@@ -203,8 +246,10 @@ Tokens (o200k_base) for 1,000 rows or records:
 | Table | 22,240 | 32,354 | 20,155 |
 | Nested records | 38,079 | 27,673 | - |
 
-TOON beats JSON on tables and loses to CSV. On nested records that are not
-uniform, the indentation costs more than JSON's quotes and braces.
+TOON beats JSON on tables and loses to CSV. These nested records have
+variable-length `tags`, so they cannot be a table, and the indentation costs
+more than JSON's quotes and braces. See [Why TOON?](#why-toon) for how the
+shape of the data decides it.
 
 Streaming keeps memory flat: `toon_stream_rows()` reads the 1,000,000-row
 file in batches of 10,000 with a 48 MB peak (131 MB for `read_toon_df()`)
