@@ -215,7 +215,7 @@ static SEXP string_or_na(const std::string& s) {
 
 static SEXP toon_string(const std::string& text, bool classed) {
     SEXP out = PROTECT(Rf_ScalarString(mkchar_utf8(text)));
-    if (classed) Rf_setAttrib(out, R_ClassSymbol, Rf_mkString("toon"));
+    if (classed) Rf_setAttrib(out, R_ClassSymbol, Rf_mkString("toonlite_toon"));
     UNPROTECT(1);
     return out;
 }

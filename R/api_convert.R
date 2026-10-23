@@ -14,7 +14,7 @@ NULL
 #'   contain comments and the encoder never writes them.
 #' @param delimiter Document delimiter: `","` (default), `"\t"` or `"|"`.
 #'
-#' @return Character scalar with class "toon".
+#' @return Character scalar with class "toonlite_toon".
 #'
 #' @details
 #' Requires the jsonlite package. If not installed, an error is thrown.

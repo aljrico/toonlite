@@ -1,14 +1,14 @@
 Package: toonlite
-Title: Read, Write, Validate, Stream, and Convert TOON Data
+Title: Read, Write, Validate, Stream, and Convert 'TOON' Data
 Version: 0.2.0
 Authors@R: person("Alejandro Jiménez Rico", role = c("aut", "cre"),
                   email = "aljrico@gmail.com")
-Description: A minimal-dependency, performance-first R package for reading,
-    writing, validating, streaming, and converting TOON (Token-Oriented Object
-    Notation) data, implementing version 4.4 of the TOON specification
-    <https://github.com/toon-format/spec>. Optimized for very large tabular
-    files with robust diagnostics. Supports JSON conversion and tabular
-    CSV/Parquet/Feather conversion.
+Description: Reads, writes, validates, streams and converts 'TOON'
+    (Token-Oriented Object Notation) data, a text format for passing
+    structured data to language models. Implements version 4.4 of the
+    specification <https://github.com/toon-format/spec>. C++ backend with no
+    required dependencies. Converts to and from CSV, and, with 'jsonlite' or
+    'arrow' installed, JSON, Parquet and Feather.
 License: MIT + file LICENSE
 URL: https://github.com/aljrico/toonlite
 BugReports: https://github.com/aljrico/toonlite/issues

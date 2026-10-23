@@ -23,19 +23,20 @@ new_toonlite_parse_error <- function(message, line = NULL, column = NULL,
     file = file
   )
 
-  # Build detailed message
+  # Build detailed message; NA fields (text input, unknown column) are omitted
+  known <- function(x) !is.null(x) && !is.na(x)
   full_message <- message
-  if (!is.null(file)) {
+  if (known(file)) {
     full_message <- paste0(full_message, "\n  File: ", file)
   }
-  if (!is.null(line)) {
+  if (known(line)) {
     loc <- paste0("line ", line)
-    if (!is.null(column)) {
+    if (known(column)) {
       loc <- paste0(loc, ", column ", column)
     }
     full_message <- paste0(full_message, "\n  Location: ", loc)
   }
-  if (!is.null(snippet) && nzchar(snippet)) {
+  if (known(snippet) && nzchar(snippet)) {
     full_message <- paste0(full_message, "\n  Snippet: ", snippet)
   }
 

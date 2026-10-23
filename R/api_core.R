@@ -128,7 +128,7 @@ read_toon <- function(file, strict = TRUE, simplify = TRUE,
 #'   `","` (default), `"\t"` or `"|"`; `"comma"`, `"tab"` and `"pipe"` also
 #'   work.
 #'
-#' @return Character scalar with class "toon" containing the TOON document.
+#' @return Character scalar with class "toonlite_toon" containing the TOON document.
 #'
 #' @details
 #' Nesting deeper than 1000 levels is an error, as it is when reading, so
@@ -202,7 +202,7 @@ write_toon <- function(x, file, pretty = TRUE, indent = 2L, strict = TRUE,
   invisible(NULL)
 }
 
-#' Print method for toon class
+#' Print method for TOON strings
 #'
 #' @param x TOON string object
 #' @param ... Additional arguments (ignored)
@@ -214,7 +214,7 @@ write_toon <- function(x, file, pretty = TRUE, indent = 2L, strict = TRUE,
 #' print(x)
 #'
 #' @export
-print.toon <- function(x, ...) {
+print.toonlite_toon <- function(x, ...) {
   cat(x, sep = "\n")
   invisible(x)
 }

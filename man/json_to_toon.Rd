@@ -25,7 +25,7 @@ contain comments and the encoder never writes them.}
 \item{delimiter}{Document delimiter: \code{","} (default), \code{"\\t"} or \code{"|"}.}
 }
 \value{
-Character scalar with class "toon".
+Character scalar with class "toonlite_toon".
 }
 \description{
 Convert JSON to TOON

@@ -5,14 +5,14 @@
 [![R-CMD-check](https://github.com/aljrico/toonlite/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/aljrico/toonlite/actions/workflows/R-CMD-check.yaml)
 <!-- badges: end -->
 
-Read, write, validate, stream and convert [TOON](https://toonformat.dev/)
-data in R, with a C++ backend and no required dependencies.
+Read, write, validate, stream and convert [TOON](https://toonformat.dev/), a
+text format for feeding structured data to LLMs, in R. C++ backend, no
+required dependencies.
 
 ## Why TOON?
 
-TOON is a text format for handing structured data to an LLM. It nests like
-JSON, but an array of same-shaped records is written as a table: the field
-names once, then one row per record.
+TOON nests like JSON, but an array of same-shaped records is written as a
+table: the field names once, then one row per record. For example:
 
 ```
 results[3]{id,user{name,country},plan}:
@@ -33,28 +33,29 @@ records, from [`bench/shapes.R`](bench/shapes.R):
 
 Use TOON when your data is JSON-shaped and mostly arrays of uniform records:
 API responses, query results, event logs. That is a lot of what goes into a
-prompt. If the data is one flat table, CSV is about 10% smaller still. If the
-records vary in shape, or it is a small config, stay with JSON.
+prompt. If the data is one flat table, CSV is about 10% smaller still
+([results](bench/results.md#tokens-1000-rows--items)). If the records vary in
+shape, or it is a small config, stay with JSON.
 
-Because arrays declare their length and fields (`[3]{...}`), a truncated or
-mangled document is caught when it is read back, not silently accepted.
+Because arrays declare their length and fields (`[3]{...}`), a truncated
+document is caught when it is read back, not silently accepted.
 
 ## Why toonlite?
-
-If you have chosen TOON, this is the package for it in R:
 
 * **Correct.** Implements [TOON spec v4.4.0](https://github.com/toon-format/spec)
   and passes all 564 official conformance fixtures, so it reads what other
   TOON implementations write and the other way round.
-* **Reads and writes.** The other TOON package on CRAN, `toon`, only writes,
-  and fails on nested data.
+* **Reads and writes.** The other TOON package on CRAN, `toon`, only writes.
+  It errors on empty vectors, and its nested output is not indented, so it
+  is not valid TOON.
 * **Fast.** A 1,000,000-row data frame writes in 0.2 s and reads in 0.3 s:
-  about 10x jsonlite and 500x `toon`. See [Benchmarks](#benchmarks).
+  about 10x jsonlite and 500x `toon`. data.table's CSV is about 3x faster
+  still, but CSV cannot hold nested data. See [Benchmarks](#benchmarks).
 * **Exact.** Doubles read back bit for bit.
 * **Streams.** `toon_stream_rows()` and `toon_stream_items()` read large
   files in batches with flat memory.
-* **Light.** No required dependencies. Converts to and from JSON, CSV,
-  Parquet and Feather.
+* **Light.** No required dependencies. Converts to and from CSV, and, with
+  jsonlite or arrow installed, JSON, Parquet and Feather.
 
 ## Installation
 
@@ -62,24 +63,10 @@ If you have chosen TOON, this is the package for it in R:
 # Install from CRAN
 install.packages("toonlite")
 
-# Or install the development version from GitHub
-# install.packages("devtools")
-devtools::install_github("aljrico/toonlite")
+# Or the development version from GitHub
+# install.packages("pak")
+pak::pak("aljrico/toonlite")
 ```
-
-## Spec compatibility
-
-Implements [TOON spec v4.4.0](https://github.com/toon-format/spec) and passes
-564/564 official conformance fixtures (404 decode, 160 encode). Known
-deviations, all from R's data model:
-
-* `\u0000` (NUL) cannot be stored in R strings, so decoding it is an error.
-* Integers are R integers between -2147483647 and 2147483647 and doubles
-  otherwise; integers beyond 2^53 lose precision, numbers beyond the double
-  range become `-Inf`/`Inf`.
-* Encoding and decoding stop with an error beyond 1000 levels of nesting.
-* `read_toon_df(ragged_rows = "expand_warn", n_mismatch = "warn")` are opt-in
-  extensions that accept input the spec rejects.
 
 ## Quick start
 
@@ -103,9 +90,17 @@ to_toon(list(x = 1, y = c(2.5, 3)))
 #> x: 1
 #> y[2]: 2.5,3
 
+# Validate
+validate_toon("tags[3]: a,b")
+#> [1] FALSE
+#> attr(,"error")$message
+#> [1] "Declared 3 values but found 2"
+#> ...
+
 # File I/O
-write_toon(data, "config.toon")
-data <- read_toon("config.toon")
+path <- tempfile(fileext = ".toon")
+write_toon(data, path)
+data <- read_toon(path)
 ```
 
 R values map to TOON as follows: named lists are objects, unnamed lists and
@@ -114,23 +109,15 @@ vectors of length other than 1 are arrays, length-1 vectors are primitives
 `NA`, `NaN` and `Inf` are `null`. Decoding returns named lists for objects
 and, with `simplify = TRUE`, atomic vectors for arrays of one primitive type.
 
-## Tabular data
+Full syntax: [toonformat.dev](https://toonformat.dev/reference/spec.html).
 
-TOON's tabular syntax declares the fields once:
-
-```
-users[3]{name,age,score}:
-  Alice,30,95.5
-  Bob,25,87
-  Charlie,35,92.3
-```
+## Data frames and streaming
 
 ```r
-# Write a data.frame
-write_toon_df(mtcars[1:3, 1:4], "cars.toon")
-
-# Read it back
-df <- read_toon_df("cars.toon")
+# Write a data frame as a tabular array, and read it back
+path <- tempfile(fileext = ".toon")
+write_toon_df(mtcars[1:3, 1:4], path)
+df <- read_toon_df(path)
 
 # Stream large files in batches of rows (data frames)...
 toon_stream_rows("large.toon", batch_size = 10000,
@@ -162,59 +149,13 @@ toon_to_csv("data.toon", "data.csv")
 toon_to_parquet("data.toon", "data.parquet")
 ```
 
-## The format
-
-**Objects** are key-value pairs; nesting is by indentation:
-```
-name: Alice
-address:
-  city: Paris
-```
-
-**Arrays** declare their length. Primitives go inline, anything else is a
-list of `- ` items:
-```
-colors[3]: red,green,blue
-mixed[3]:
-  - 1
-  - text
-  - id: 7
-    ok: true
-```
-
-**Tabular** arrays of uniform objects use a header with fields, then rows:
-```
-[3]{name,age}:
-  Alice,30
-  Bob,25
-  Charlie,35
-```
-
-**Types**: strings (quoted only when needed), numbers, booleans, and null:
-```
-name: Alice
-zip: "01234"
-score: 95.5
-active: true
-nickname: null
-```
-
-**Comments** are whole lines starting with `#`:
-```
-# connection settings
-server: localhost
-port: 8080
-```
-
-For the full format specification, see [toonformat.dev](https://toonformat.dev/reference/spec.html).
-
 ## Benchmarks
 
 Apple M4 Pro, 48 GB RAM, macOS 27, R 4.5.1, 23 October 2026. toonlite
 0.2.0, toon 0.0.1 (the other TOON package on CRAN), jsonlite 2.0.0,
 data.table 1.17.8. Medians from `bench::mark()`; peak memory is resident
 set size above a fresh R session. Script and full results:
-[`bench/`](https://github.com/aljrico/toonlite/blob/main/bench/results.md).
+[`bench/`](bench/results.md).
 
 A 1,000,000-row data frame (int, double, character and logical columns,
 5% NA):
@@ -237,24 +178,27 @@ A 1,000,000-row data frame (int, double, character and logical columns,
 | jsonlite | 13.2 s | 143 ms | 8.4 MB |
 
 toon 0.0.1 cannot write these: it errors on the empty tag vectors, and
-without them its output does not decode to the input.
+without them its output is not valid TOON.
 
-Tokens (o200k_base) for 1,000 rows or records:
+Streaming cuts peak memory by more than half at the same speed:
+`toon_stream_rows()` reads the 1,000,000-row file in batches of 10,000 with
+a 48 MB peak, and `toon_stream_items()` reads the 100,000 records with a
+30 MB peak (167 MB for `read_toon()`).
 
-| Data | TOON | JSON (compact) | CSV |
-| --- | --- | --- | --- |
-| Table | 22,240 | 32,354 | 20,155 |
-| Nested records | 38,079 | 27,673 | - |
+## Spec compatibility
 
-TOON beats JSON on tables and loses to CSV. These nested records have
-variable-length `tags`, so they cannot be a table, and the indentation costs
-more than JSON's quotes and braces. See [Why TOON?](#why-toon) for how the
-shape of the data decides it.
+Passes 564/564 official conformance fixtures (404 decode, 160 encode).
+Where R differs:
 
-Streaming keeps memory flat: `toon_stream_rows()` reads the 1,000,000-row
-file in batches of 10,000 with a 48 MB peak (131 MB for `read_toon_df()`)
-in the same time, and `toon_stream_items()` reads the 100,000 records with
-a 30 MB peak (167 MB for `read_toon()`).
+* `\u0000` (NUL) cannot be stored in R strings, so decoding it is an error.
+* Integers are R integers between -2147483647 and 2147483647 and doubles
+  otherwise; integers beyond 2^53 lose precision, numbers beyond the double
+  range become `-Inf`/`Inf`.
+* `read_toon_df(ragged_rows = "expand_warn", n_mismatch = "warn")` are opt-in
+  extensions that accept input the spec rejects.
+
+Limits: encoding and decoding stop with an error beyond 1000 levels of
+nesting.
 
 ## License
 

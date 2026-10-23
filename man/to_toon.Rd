@@ -34,7 +34,7 @@ Passing TRUE warns.}
 work.}
 }
 \value{
-Character scalar with class "toon" containing the TOON document.
+Character scalar with class "toonlite_toon" containing the TOON document.
 }
 \description{
 Encodes an R value as a TOON document following spec v4.4: canonical

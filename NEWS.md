@@ -6,6 +6,9 @@ which run in the test suite. No fixture is skipped.
 
 ## Breaking changes
 
+* `to_toon()` and `json_to_toon()` return class `"toonlite_toon"` instead of
+  `"toon"`, which clashed with the `toon` package's print method.
+
 Output is now canonical TOON, so most documents are written differently:
 
 * Strings are quoted only when the spec requires it, and cells have no space
