@@ -125,15 +125,16 @@ private:
     R_xlen_t arr_size(Val v) const;
     Val arr_elem(Val v, R_xlen_t k) const;
 
-    void line(size_t depth);
+    void line(size_t depth, bool row = false);
     void prim(Val v, bool root = false);
     void check_unique(SEXP names);
 
     bool all_prim(Val arr) const;
-    bool build_group(const std::vector<Val>& objs, Fields& f, size_t gi);
+    bool build_group(const std::vector<Val>& objs, Fields& f, size_t gi, size_t level = 1);
     bool tabular(Val arr, Fields& f);
     bool keyed(Val obj, Fields& f);
-    bool df_leaves(SEXP df, Fields& f, size_t gi, std::vector<PrimVec>& leaves);
+    bool df_leaves(SEXP df, Fields& f, size_t gi, std::vector<PrimVec>& leaves,
+                   size_t level = 1);
 
     void header(R_xlen_t n, bool keyed, const Fields* f);
     void field_list(const Fields& f, size_t gi);

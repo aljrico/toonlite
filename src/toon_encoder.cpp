@@ -11,9 +11,11 @@ namespace toonlite {
 
 namespace {
 
-// Nesting beyond this is almost certainly a cycle-like structure built by
-// mistake; stop before the C stack runs out.
-constexpr size_t kMaxDepth = 10000;
+// Same messages as the reader's.
+[[noreturn]] void too_deep(const char* what) {
+    throw std::runtime_error(std::string(what) + " deeper than " +
+                             std::to_string(kMaxNesting) + " levels");
+}
 
 bool has_class(SEXP x, const char* cls) { return Rf_isObject(x) && Rf_inherits(x, cls); }
 
@@ -386,10 +388,11 @@ Encoder::Val Encoder::arr_elem(Val v, R_xlen_t k) const {
     return Val{v.x, k};
 }
 
-void Encoder::line(size_t depth) {
-    if (depth > kMaxDepth) {
-        throw std::runtime_error("Nesting is deeper than " + std::to_string(kMaxDepth) + " levels");
-    }
+// Readers stop beyond kMaxNesting levels (toon_lex.h), so the encoder does
+// too: a line at depth d lies inside d nested objects or arrays, except
+// tabular and keyed rows, which sit one level below their header.
+void Encoder::line(size_t depth, bool row) {
+    if (depth > kMaxNesting + (row ? 1 : 0)) too_deep("Nesting is");
     o_.line(depth * static_cast<size_t>(opts_.indent));
 }
 
@@ -442,7 +445,8 @@ bool Encoder::all_prim(Val arr) const {
 
 // Field group `gi` for objects `objs`: every one a non-empty object with the
 // same keys, and every column uniform-primitive or nested-uniform.
-bool Encoder::build_group(const std::vector<Val>& objs, Fields& f, size_t gi) {
+bool Encoder::build_group(const std::vector<Val>& objs, Fields& f, size_t gi, size_t level) {
+    if (level > kMaxNesting) too_deep("Field groups are nested");
     const Val first = objs[0];
     if (kind(first) != Kind::Object) return false;
     const R_xlen_t k = obj_size(first);
@@ -485,7 +489,7 @@ bool Encoder::build_group(const std::vector<Val>& objs, Fields& f, size_t gi) {
         }
         const int g = static_cast<int>(f.groups.size());
         f.groups.emplace_back();
-        if (!build_group(sub, f, static_cast<size_t>(g))) return false;
+        if (!build_group(sub, f, static_cast<size_t>(g), level + 1)) return false;
         f.groups[gi].push_back(Field{name, g});
     }
     return true;
@@ -513,7 +517,9 @@ bool Encoder::keyed(Val obj, Fields& f) {
 // Fast path for a data.frame whose columns are atomic vectors or, nested,
 // data.frames of them: the field list comes from the names and every cell is
 // written straight from its column.
-bool Encoder::df_leaves(SEXP df, Fields& f, size_t gi, std::vector<PrimVec>& leaves) {
+bool Encoder::df_leaves(SEXP df, Fields& f, size_t gi, std::vector<PrimVec>& leaves,
+                        size_t level) {
+    if (level > kMaxNesting) too_deep("Field groups are nested");
     const R_xlen_t ncol = Rf_xlength(df);
     if (ncol == 0) return false;
     SEXP names = Rf_getAttrib(df, R_NamesSymbol);
@@ -525,7 +531,7 @@ bool Encoder::df_leaves(SEXP df, Fields& f, size_t gi, std::vector<PrimVec>& lea
             const int g = static_cast<int>(f.groups.size());
             f.groups.emplace_back();
             f.groups[gi].push_back(Field{STRING_ELT(names, j), g});
-            if (!df_leaves(col, f, static_cast<size_t>(g), leaves)) return false;
+            if (!df_leaves(col, f, static_cast<size_t>(g), leaves, level + 1)) return false;
         } else if (is_atomic(col) && Rf_getAttrib(col, R_DimSymbol) == R_NilValue) {
             f.groups[gi].push_back(Field{STRING_ELT(names, j), -1});
             leaves.push_back(prim_vec(col));
@@ -628,7 +634,7 @@ void Encoder::keyed_rows(Val obj, const Fields& f, size_t depth) {
     SEXP names = obj_names(obj);
     const R_xlen_t n = obj_size(obj);
     for (R_xlen_t j = 0; j < n; j++) {
-        line(depth);
+        line(depth, true);
         write_key(o_, char_utf8(STRING_ELT(names, j)));
         o_.put(": ");
         bool first = true;
@@ -651,7 +657,7 @@ void Encoder::array_after_key(Val arr, size_t depth, bool has_key) {
         if (df_leaves(arr.x, f, 0, leaves)) {
             header(n, false, &f);
             for (R_xlen_t i = 0; i < n; i++) {
-                line(depth);
+                line(depth, true);
                 for (size_t k = 0; k < leaves.size(); k++) {
                     if (k > 0) o_.put(opts_.delim);
                     write_prim(o_, leaves[k], i, opts_.delim);
@@ -673,7 +679,7 @@ void Encoder::array_after_key(Val arr, size_t depth, bool has_key) {
     if (tabular(arr, f)) {
         header(n, false, &f);
         for (R_xlen_t k = 0; k < n; k++) {
-            line(depth);
+            line(depth, true);
             bool first = true;
             cells(arr_elem(arr, k), f, 0, first);
             if ((k & 0xFFFF) == 0xFFFF) check_interrupt();

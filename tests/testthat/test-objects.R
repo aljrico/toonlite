@@ -51,3 +51,26 @@ test_that("deep nesting has a limit", {
   expect_true(is.list(from_toon(nest(1000))))
   expect_error(from_toon(nest(1001)), "deeper than 1000 levels")
 })
+
+test_that("the encoder has the decoder's nesting limit", {
+  nest_obj <- function(d) { x <- 1L; for (i in seq_len(d)) x <- list(k = x); x }
+  nest_arr <- function(d) { x <- list(1L, 2L); for (i in seq_len(d)) x <- list(x, 1L); x }
+  nest_tab <- function(d) { x <- data.frame(a = 1:2); for (i in seq_len(d)) x <- list(k = x); x }
+  nest_grp <- function(d) list(list(a = nest_obj(d)), list(a = nest_obj(d)))
+  # The deepest value either side accepts round-trips; one more level is an
+  # error when writing, not a file that cannot be read back.
+  cases <- list(list(nest_obj, 1001), list(nest_arr, 1000), list(nest_tab, 1001),
+                list(nest_grp, 999))
+  for (case in cases) {
+    f <- case[[1]]
+    d <- case[[2]]
+    expect_no_error(from_toon(to_toon(f(d))))
+    expect_error(to_toon(f(d + 1)), "deeper than 1000 levels")
+  }
+  # identical(): testthat's comparison recurses too deeply here
+  expect_true(identical(from_toon(to_toon(nest_obj(1001))), nest_obj(1001)))
+  tmp <- tempfile(fileext = ".toon")
+  on.exit(unlink(tmp))
+  expect_error(write_toon(nest_obj(5000), tmp), "Nesting is deeper than 1000 levels")
+  expect_false(file.exists(tmp))
+})

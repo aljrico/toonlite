@@ -43,6 +43,9 @@ uniform objects (with nested field groups) and keyed tables for objects of
 uniform objects. The output has no trailing newline.
 }
 \details{
+Nesting deeper than 1000 levels is an error, as it is when reading, so
+everything written can be read back.
+
 R values map to the JSON data model as follows:
 \itemize{
 \item \code{NULL}, \code{NA}, \code{NaN}, \code{Inf} -> \code{null}

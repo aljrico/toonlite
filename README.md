@@ -36,7 +36,7 @@ deviations, all from R's data model:
 * Integers are R integers between -2147483647 and 2147483647 and doubles
   otherwise; integers beyond 2^53 lose precision, numbers beyond the double
   range become `-Inf`/`Inf`.
-* Decoding stops with an error beyond 1000 levels of nesting.
+* Encoding and decoding stop with an error beyond 1000 levels of nesting.
 * `read_toon_df(ragged_rows = "expand_warn", n_mismatch = "warn")` are opt-in
   extensions that accept input the spec rejects.
 

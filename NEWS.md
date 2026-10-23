@@ -81,6 +81,9 @@ Deprecated arguments are ignored and warn; the 0.1.1 deprecations still warn.
 
 ## Bug fixes
 
+* Writers stop with an error beyond 1000 levels of nesting, the readers'
+  limit, instead of writing documents that cannot be read back (they
+  allowed 10000 levels).
 * `validate_toon()` attached its `error` attribute to R's shared `FALSE`
   value, so unrelated `FALSE` results could carry it for the rest of the
   session.
@@ -107,7 +110,8 @@ These follow from R's data model; see the README.
   error when decoding.
 * Integers are R integers between -2147483647 and 2147483647 and doubles
   otherwise, so integers beyond 2^53 lose precision.
-* Nesting deeper than 1000 levels is an error when decoding.
+* Nesting deeper than 1000 levels is an error, when encoding and when
+  decoding.
 
 # toonlite 0.1.1
 

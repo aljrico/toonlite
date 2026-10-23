@@ -124,6 +124,9 @@ read_toon <- function(file, strict = TRUE, simplify = TRUE,
 #' @return Character scalar with class "toon" containing the TOON document.
 #'
 #' @details
+#' Nesting deeper than 1000 levels is an error, as it is when reading, so
+#' everything written can be read back.
+#'
 #' R values map to the JSON data model as follows:
 #' \itemize{
 #'   \item `NULL`, `NA`, `NaN`, `Inf` -> `null`
